@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\View;
 
+use Atannex\Intermidiate\Attributes\ForView;
 use Atannex\Intermidiate\Presenter;
-use Atannex\Intermidiate\Support\Schema;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -39,11 +39,24 @@ final class Discovery
                 $relative = substr($file->getPathname(), strlen(rtrim($directory, '/\\')) + 1, -4);
                 $class = trim($namespace, '\\').'\\'.str_replace(['/', '\\'], '\\', $relative);
 
-                if (! class_exists($class) || ! is_subclass_of($class, Presenter::class) || (new ReflectionClass($class))->isAbstract()) {
+                if (! class_exists($class) || ! is_subclass_of($class, Presenter::class)) {
                     continue;
                 }
 
-                $views = Schema::of($class)->views;
+                $reflection = new ReflectionClass($class);
+
+                if ($reflection->isAbstract()) {
+                    continue;
+                }
+
+                // Only the attribute is read here; members are reflected when the view renders.
+                $views = [];
+
+                foreach ($reflection->getAttributes(ForView::class) as $attribute) {
+                    array_push($views, ...$attribute->newInstance()->views);
+                }
+
+                $views = array_values(array_unique($views));
 
                 if ($views !== []) {
                     $found[$class] = $views;
