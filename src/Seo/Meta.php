@@ -32,7 +32,9 @@ final class Meta implements Htmlable, Stringable
 {
     /** Variable names, then section names, read when guessing. */
     private const GUESS = [
-        'title' => [['metaTitle', 'seoTitle', 'pageTitle', 'title', 'headline'], ['og:title', 'title']],
+        'title' => [['metaTitle', 'seoTitle', 'pageTitle', 'title', 'headline'], ['title']],
+        'shareTitle' => [['shareTitle', 'ogTitle'], ['og:title']],
+        'card' => [['twitterCard'], ['twitter:card']],
         'description' => [['metaDescription', 'seoDescription', 'description', 'excerpt', 'summary'], ['meta:description', 'description']],
         'image' => [['ogImage', 'metaImage', 'image', 'imageUrl', 'cover'], ['og:image', 'image']],
         'canonical' => [['canonical', 'canonicalUrl'], ['canonical']],
@@ -40,6 +42,10 @@ final class Meta implements Htmlable, Stringable
     ];
 
     private ?string $title = null;
+
+    private ?string $shareTitle = null;
+
+    private ?string $card = null;
 
     private ?string $description = null;
 
@@ -117,6 +123,22 @@ final class Meta implements Htmlable, Stringable
     {
         $this->title = $title === null ? null : Format::text(self::decode($title));
         $this->suffix = $suffix;
+
+        return $this;
+    }
+
+    /** The title on share cards (og:title, twitter:title), when it differs from <title>: the bare headline. */
+    public function shareTitle(?string $title): self
+    {
+        $this->shareTitle = $title === null ? null : Format::text(self::decode($title));
+
+        return $this;
+    }
+
+    /** twitter:card: summary, summary_large_image (the default with an image), player, app. */
+    public function card(?string $card): self
+    {
+        $this->card = $card;
 
         return $this;
     }
@@ -239,7 +261,10 @@ final class Meta implements Htmlable, Stringable
 
         $title = mb_substr($this->title, 0, (int) Settings::get('seo.title_limit', 95));
 
-        return $this->suffix && $site !== '' && $title !== $site ? $title.Settings::get('seo.separator', ' · ').$site : $title;
+        // Titles that already name the site (an app's own seo_title()) aren't suffixed twice.
+        $suffix = $this->suffix && Settings::get('seo.suffix', true) && $site !== '' && ! str_contains(mb_strtolower($title), mb_strtolower($site));
+
+        return $suffix ? $title.Settings::get('seo.separator', ' · ').$site : $title;
     }
 
     /** The canonical URL: as set, or this page without its query string (page 2+ keeps ?page). */
@@ -289,7 +314,7 @@ final class Meta implements Htmlable, Stringable
         foreach ([
             'og:type' => $this->type,
             'og:site_name' => $site,
-            'og:title' => $this->title ?? $site,
+            'og:title' => $this->shareTitle ?? $this->title ?? $site,
             'og:description' => $this->description,
             'og:url' => $url,
             'og:image' => $this->image,
@@ -300,9 +325,9 @@ final class Meta implements Htmlable, Stringable
         }
 
         foreach ([
-            'twitter:card' => $this->image === null ? 'summary' : 'summary_large_image',
+            'twitter:card' => $this->card ?? ($this->image === null ? 'summary' : 'summary_large_image'),
             'twitter:site' => Settings::get('seo.twitter'),
-            'twitter:title' => $this->title ?? $site,
+            'twitter:title' => $this->shareTitle ?? $this->title ?? $site,
             'twitter:description' => $this->description,
             'twitter:image' => $this->image,
             ...$this->names,

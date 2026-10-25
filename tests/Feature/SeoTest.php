@@ -64,6 +64,42 @@ final class SeoTest extends TestCase
         $this->assertStringContainsString('<meta name="theme-color" content="#111">', $html);
     }
 
+    public function test_a_share_title_and_card_apart_from_the_document_title(): void
+    {
+        $html = Meta::make()->title('Story: Top stories – ATANNEX', suffix: false)->shareTitle('Rain in Fontem')->card('player')->toHtml();
+
+        $this->assertStringContainsString('<title>Story: Top stories – ATANNEX</title>', $html);
+        $this->assertStringContainsString('<meta property="og:title" content="Rain in Fontem">', $html);
+        $this->assertStringContainsString('<meta name="twitter:title" content="Rain in Fontem">', $html);
+        $this->assertStringContainsString('<meta name="twitter:card" content="player">', $html);
+    }
+
+    public function test_sections_fill_the_share_title_and_card(): void
+    {
+        $html = View::make('share')->render();
+
+        $this->assertStringContainsString('<title>Full &amp; suffixed – Site · Laravel</title>', $html);
+        $this->assertStringContainsString('<meta property="og:title" content="Bare headline">', $html);
+        $this->assertStringContainsString('<meta name="twitter:card" content="player">', $html);
+
+        config(['app.name' => 'Site']);
+        $this->assertStringContainsString('<title>Full &amp; suffixed – Site</title>', View::make('share')->render(), 'already names the site');
+
+        config(['app.name' => 'Laravel', 'intermidiate.seo.suffix' => false]);
+        $this->assertStringContainsString('<title>Full &amp; suffixed – Site</title>', View::make('share')->render());
+    }
+
+    public function test_the_website_search_action(): void
+    {
+        $data = JsonLd::website('Atannex', 'https://atannex.test', 'https://atannex.test/search?q={search_term_string}')->toArray();
+
+        $this->assertSame([
+            '@type' => 'SearchAction',
+            'target' => ['@type' => 'EntryPoint', 'urlTemplate' => 'https://atannex.test/search?q={search_term_string}'],
+            'query-input' => 'required name=search_term_string',
+        ], $data['potentialAction']);
+    }
+
     public function test_og_locale_can_be_fixed_or_left_out(): void
     {
         app()->setLocale('fr-CM');

@@ -153,6 +153,7 @@ return [
     'seo' => [
         'site' => null,
         'separator' => ' · ',
+        'suffix' => true,                   // add the site name to titles that don't already include it
         'title_limit' => 95,
         'description_limit' => 160,
         'twitter' => null,                  // '@handle'

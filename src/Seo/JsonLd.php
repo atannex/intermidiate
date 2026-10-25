@@ -91,7 +91,11 @@ final class JsonLd implements Arrayable, Htmlable, JsonSerializable, Stringable
         return self::make('WebSite', [
             'name' => $name,
             'url' => $url,
-            'potentialAction' => $search === null ? null : ['@type' => 'SearchAction', 'target' => $search, 'query-input' => 'required name=search_term_string'],
+            'potentialAction' => $search === null ? null : [
+                '@type' => 'SearchAction',
+                'target' => ['@type' => 'EntryPoint', 'urlTemplate' => $search],
+                'query-input' => 'required name=search_term_string',
+            ],
         ]);
     }
 
