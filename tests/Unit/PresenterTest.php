@@ -222,13 +222,20 @@ final class PresenterTest extends TestCase
         Schema::of(Duplicate::class);
     }
 
-    public function test_a_presenter_without_a_view_says_so(): void
+    public function test_a_presenter_without_for_view_renders_the_view_named_after_it(): void
     {
-        $this->expectExceptionMessage('has no view');
+        $this->assertSame('desk', DeskPresenter::make(desk: Desk::News)->toView()->name());
+    }
 
-        DeskPresenter::make(desk: Desk::News)->toView();
+    public function test_a_presenter_without_a_view_says_where_to_put_one(): void
+    {
+        $this->expectExceptionMessage('Orphan has no view. Create resources/views/orphan.blade.php');
+
+        (new Orphan)->toView();
     }
 }
+
+final class Orphan extends Presenter {}
 
 final class Duplicate extends Presenter
 {

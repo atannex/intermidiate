@@ -56,7 +56,7 @@ final class ListCommand extends Command
         }
 
         if ($rows === []) {
-            $this->components->info('No Presenters are bound to views yet. Add #[ForView(\'name\')] or config intermidiate.bindings.');
+            $this->components->info('No Presenters are bound to views yet. Put one in app/Presenters named after its view (ArchivePresenter for archive.blade.php), or run make:presenter archive.');
 
             return self::SUCCESS;
         }

@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace {{ namespace }};
 
 use Atannex\Intermidiate\Presenting\ModelPresenter;
-
+{{ imports }}
 /**
- * @extends ModelPresenter<mixed>
+ * @extends ModelPresenter<{{ model }}>
  */
-final class {{ class }} extends ModelPresenter
+{{ attribute }}final class {{ class }} extends ModelPresenter
 {
-    // Computed fields, read as properties in the view ($card->kicker):
+    // Computed fields, read as properties in the view ($post->kicker).
+    // Everything else ($post->title, $post->author) is read from the model.
     //
     // public function kicker(): string
     // {
-    //     return Str::upper($this->subject->category?->name ?? 'News');
+    //     return Str::upper($this->category?->name ?? 'News');
     // }
 }

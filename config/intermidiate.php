@@ -23,17 +23,59 @@ return [
     | Discovery
     |--------------------------------------------------------------------------
     |
-    | Namespaces (and the folders they live in) scanned for Presenters that
-    | carry #[ForView(...)]. Run `php artisan presenter:cache` in production
-    | (or `php artisan optimize`) so the scan doesn't happen on every request.
+    | Namespaces (and the folders they live in) scanned for Presenters. Null
+    | means the app's own folder: App\Presenters in app/Presenters, under
+    | whatever namespace composer.json gives the app. Add module folders as
+    | 'Modules\\Blog\\Presenters' => base_path('modules/Blog/Presenters').
+    |
+    | Run `php artisan presenter:cache` in production (or `php artisan
+    | optimize`) so the scan doesn't happen on every request.
     |
     */
 
-    'discover' => [
-        'App\\Presenters' => app_path('Presenters'),
-    ],
+    'discover' => null,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Conventions
+    |--------------------------------------------------------------------------
+    |
+    | A discovered Presenter without #[ForView] serves the view named after
+    | its path, when that view exists:
+    |
+    |     Presenters/ArchivePresenter.php        → archive.blade.php
+    |     Presenters/Archive/MonthPresenter.php  → archive/month.blade.php
+    |     Presenters/Layouts/AppPresenter.php    → layouts/app.blade.php
+    |
+    | It's also the view `return ArchivePresenter::make(...)` renders.
+    |
+    */
+
+    'conventions' => true,
 
     'cache' => base_path('bootstrap/cache/intermidiate.php'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Model presenters
+    |--------------------------------------------------------------------------
+    |
+    | Models a Presenter hands to its view (one, a collection, a paginator or
+    | a Group) arrive wrapped in their ModelPresenter, found by name:
+    |
+    |     App\Models\Post → App\Presenters\Models\PostPresenter
+    |
+    | or by #[Presents(Post::class)] on the presenter, or by the map below.
+    | Models without one pass through untouched. False wraps only members
+    | marked #[Present].
+    |
+    |     'models' => [App\Models\Post::class => App\Presenters\StoryCard::class],
+    |
+    */
+
+    'present' => true,
+
+    'models' => [],
 
     /*
     |--------------------------------------------------------------------------
@@ -84,6 +126,37 @@ return [
     */
 
     'pad' => 2,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dates
+    |--------------------------------------------------------------------------
+    |
+    | Named formats for Format::date($date, 'long'), on top of the built-in
+    | short (j M), medium (j M Y), long (j F Y), full (l j F Y), month (M Y),
+    | time (H:i) and datetime (j M Y, H:i). Dates are shown in app.timezone,
+    | translated to the app locale.
+    |
+    */
+
+    'dates' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SEO
+    |--------------------------------------------------------------------------
+    |
+    | Used by Meta and @meta. The site name defaults to app.name.
+    |
+    */
+
+    'seo' => [
+        'site' => null,
+        'separator' => ' · ',
+        'title_limit' => 95,
+        'description_limit' => 160,
+        'twitter' => null,                  // '@handle'
+    ],
 
     /*
     |--------------------------------------------------------------------------

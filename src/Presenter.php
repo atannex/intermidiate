@@ -6,11 +6,14 @@ namespace Atannex\Intermidiate;
 
 use ArrayAccess;
 use ArrayIterator;
+use Atannex\Intermidiate\Attributes\Cached;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Exceptions\UnknownMember;
 use Atannex\Intermidiate\Presenting\ModelPresenter;
+use Atannex\Intermidiate\Presenting\Models;
 use Atannex\Intermidiate\Slicing\Partition;
 use Atannex\Intermidiate\Support\Deferred;
+use Atannex\Intermidiate\Support\Fingerprint;
 use Atannex\Intermidiate\Support\Hydrator;
 use Atannex\Intermidiate\Support\Member;
 use Atannex\Intermidiate\Support\Schema;
@@ -52,6 +55,9 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
 
     /** @var array<string, mixed> */
     private array $extra = [];
+
+    /** @var array<string, array{mixed, mixed}> property name => [value, presented value] */
+    private array $presented = [];
 
     private ?string $template = null;
 
@@ -110,7 +116,14 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
 
         $views = Schema::of($this)->views;
 
-        return count($views) === 1 && ! str_contains($views[0], '*') ? $views[0] : null;
+        if ($views !== []) {
+            return count($views) === 1 && ! str_contains($views[0], '*') ? $views[0] : null;
+        }
+
+        // No #[ForView]: the view named after the class (ArchivePresenter → archive).
+        $container = Container::getInstance();
+
+        return $container->bound(Intermidiate::class) ? $container->make(Intermidiate::class)->conventionalView(static::class) : null;
     }
 
     /**
@@ -184,8 +197,7 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
 
     public function toView(): View
     {
-        $view = $this->template()
-            ?? throw new PresenterException(static::class.' has no view. Call ->view(\'name\') or add #[ForView(\'name\')].');
+        $view = $this->template() ?? throw new PresenterException(static::class.' has no view. '.$this->missingViewHint());
 
         return Container::getInstance()->make(Factory::class)->make($view, $this->toArray());
     }
@@ -306,17 +318,104 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * Wraps each item in a model presenter.
+     * Wraps a model, or each item, in its model presenter: the one given, or
+     * the one found for it (Post → Presenters\Models\PostPresenter).
+     * Members are presented without this; it's for values you build inside.
      *
-     * @template P of ModelPresenter
-     *
-     * @param  iterable<mixed>  $items
-     * @param  class-string<P>  $presenter
-     * @return Collection<int, P>
+     * @param  object|iterable<mixed>  $items
+     * @param  class-string<ModelPresenter>|null  $presenter
+     * @return ($items is iterable ? Collection<int, ModelPresenter> : ModelPresenter)
      */
-    protected function present(iterable $items, string $presenter): Collection
+    protected function present(object|iterable $items, ?string $presenter = null): Collection|ModelPresenter
     {
-        return $presenter::collection($items);
+        if ($presenter !== null) {
+            return is_iterable($items) || $items instanceof Paginator || $items instanceof CursorPaginator ? $presenter::collection($items) : $presenter::make($items);
+        }
+
+        $models = self::models() ?? throw new PresenterException('Model presenters are found by the Intermidiate service; pass the class to present() outside an app.');
+
+        if (! is_iterable($items) && ! $items instanceof Paginator && ! $items instanceof CursorPaginator) {
+            return $models->wrap($items, $this->modelPresenter($models, $items));
+        }
+
+        $items = $items instanceof Paginator || $items instanceof CursorPaginator ? $items->items() : $items;
+
+        return (new Collection($items))
+            ->filter(fn ($item) => $item !== null)
+            ->map(fn ($item) => $models->wrap($item, $this->modelPresenter($models, $item)))
+            ->values();
+    }
+
+    /** @return class-string<ModelPresenter> */
+    private function modelPresenter(Models $models, mixed $item): string
+    {
+        if ($item instanceof ModelPresenter) {
+            return $item::class;
+        }
+
+        $class = is_object($item) ? $item::class : get_debug_type($item);
+
+        return (is_object($item) ? $models->for($item) : null) ?? throw new PresenterException(sprintf(
+            'No model presenter for %s. Create %s (php artisan make:model-presenter %s), or name it with #[Presents(%s::class)].',
+            $class, $models->candidates($class)[0] ?? 'one', class_basename($class), class_basename($class),
+        ));
+    }
+
+    private static function models(): ?Models
+    {
+        $container = Container::getInstance();
+
+        return $container->bound(Intermidiate::class) ? $container->make(Intermidiate::class)->models() : null;
+    }
+
+    /** A #[Cached] member's value, from the cache when it's there. */
+    private function cached(Member $member, Cached $cached): mixed
+    {
+        $container = Container::getInstance();
+
+        if (! $container->bound('cache')) {
+            return $this->{$member->name}();
+        }
+
+        $cache = $container->make('cache')->store($cached->store);
+
+        if ($cached->tags !== [] && method_exists($cache->getStore(), 'tags')) {
+            $cache = $cache->tags($cached->tags);
+        }
+
+        $key = sprintf('intermidiate:%s:%s:%s:%s', static::class, $member->name, Settings::locale(), Fingerprint::of($this));
+        $ttl = $cached->ttl();
+        $compute = fn () => $this->{$member->name}();
+
+        return $ttl === null ? $cache->rememberForever($key, $compute) : $cache->remember($key, $ttl, $compute);
+    }
+
+    /** Wraps a member's models in their presenter, unless it's #[Raw] or presenting is off. */
+    private function presentMember(Member $member, mixed $value): mixed
+    {
+        if ($member->present === false || ($member->present === null && ! Settings::get('present', true))) {
+            return $value;
+        }
+
+        $models = self::models();
+
+        return $models === null ? $value : $models->wrap($value, is_string($member->present) ? $member->present : null);
+    }
+
+    private function missingViewHint(): string
+    {
+        $container = Container::getInstance();
+
+        if (Schema::of($this)->views === [] && $container->bound(Intermidiate::class)) {
+            $tried = $container->make(Intermidiate::class)->conventionalViews(static::class);
+
+            return sprintf('Create %s, call ->view(\'name\') or add #[ForView(\'name\')].', implode(' or ', array_map(
+                fn (string $view) => 'resources/views/'.str_replace('.', '/', $view).'.blade.php',
+                $tried,
+            )));
+        }
+
+        return 'Call ->view(\'name\') or add #[ForView(\'name\')].';
     }
 
     private function resolve(Member $member): mixed
@@ -327,7 +426,14 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
         }
 
         if ($member->kind === Member::PROPERTY) {
-            return $this->{$member->name};
+            $value = $this->{$member->name};
+
+            // Re-wrapped only when the property changed, so computed fields stay memoized.
+            if (! isset($this->presented[$member->name]) || $this->presented[$member->name][0] !== $value) {
+                $this->presented[$member->name] = [$value, $this->presentMember($member, $value)];
+            }
+
+            return $this->presented[$member->name][1];
         }
 
         if ($member->kind === Member::CALLABLE) {
@@ -335,7 +441,9 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
         }
 
         if (! array_key_exists($member->name, $this->resolved)) {
-            $this->resolved[$member->name] = $this->{$member->name}();
+            $this->resolved[$member->name] = $this->presentMember($member, $member->cached === null
+                ? $this->{$member->name}()
+                : $this->cached($member, $member->cached));
         }
 
         return $this->resolved[$member->name];

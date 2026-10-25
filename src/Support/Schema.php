@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\Support;
 
+use Atannex\Intermidiate\Attributes\Cached;
 use Atannex\Intermidiate\Attributes\Expose;
 use Atannex\Intermidiate\Attributes\ForView;
 use Atannex\Intermidiate\Attributes\Hidden;
 use Atannex\Intermidiate\Attributes\Lazy;
+use Atannex\Intermidiate\Attributes\Present;
+use Atannex\Intermidiate\Attributes\Raw;
 use Atannex\Intermidiate\Attributes\ViewOnly;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Presenter;
@@ -96,6 +99,7 @@ final class Schema
                 $property->hasType() ? (string) $property->getType() : null,
                 false,
                 self::has($property, ViewOnly::class),
+                self::present($property),
             ));
         }
 
@@ -113,6 +117,8 @@ final class Schema
                 $method->hasReturnType() ? (string) $method->getReturnType() : null,
                 self::has($method, Lazy::class),
                 self::has($method, ViewOnly::class),
+                self::present($method),
+                ($method->getAttributes(Cached::class)[0] ?? null)?->newInstance(),
             ));
         }
 
@@ -142,6 +148,17 @@ final class Schema
         $expose = $member->getAttributes(Expose::class)[0] ?? null;
 
         return $expose ? $expose->newInstance()->as : $name;
+    }
+
+    private static function present(ReflectionProperty|ReflectionMethod $member): string|bool|null
+    {
+        if (self::has($member, Raw::class)) {
+            return false;
+        }
+
+        $present = $member->getAttributes(Present::class)[0] ?? null;
+
+        return $present ? ($present->newInstance()->presenter ?? true) : null;
     }
 
     private static function has(ReflectionProperty|ReflectionMethod $member, string $attribute): bool

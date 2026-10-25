@@ -1,0 +1,3 @@
+{{-- Every public property and method of {{ class }} is a variable here ($presenter is the whole object). --}}
+<div>
+</div>

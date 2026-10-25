@@ -4,8 +4,20 @@
 
 **Presenters for Laravel.** Move data shaping out of Blade and into small, typed PHP classes. That covers splitting a page of stories into a lead, a secondary pair and a ledger, zero-padding calendar parameters, numbering folios across pages, windowing pagers and deciding which menu item is active. All of it is worked out before the view renders, so controllers stay short and views only hold markup.
 
+```bash
+php artisan make:presenter archive        # app/Presenters/ArchivePresenter.php + resources/views/archive.blade.php
+```
+
 ```php
-return ArchivePresenter::make(posts: $posts, year: $year, month: $month);
+return view('archive', compact('posts', 'year', 'month'));   // the controller doesn't change
+```
+
+Nothing to register. A Presenter's place in `app/Presenters` names its view, so `ArchivePresenter` serves `archive.blade.php` and `Archive/MonthPresenter` serves `archive/month.blade.php`. The view's own data builds it before it renders, and anything the controller left out comes from the route.
+
+Or skip the controller altogether:
+
+```php
+Route::presenter('/archive/{year}/{month?}', ArchivePresenter::class)->name('archive');
 ```
 
 ```blade
@@ -25,7 +37,11 @@ No `@php`, no `str_pad`, no `slice(3)`.
 - [Why](#why)
 - [Install](#install)
 - [Writing a Presenter](#writing-a-presenter)
+- [Where Presenters live](#where-presenters-live)
 - [Three ways to use one](#three-ways-to-use-one)
+- [Pages without controllers](#pages-without-controllers)
+- [Loading models: #[Paginate] and #[Fetch]](#loading-models-paginate-and-fetch)
+- [Inputs that fill themselves](#inputs-that-fill-themselves)
 - [Typed inputs](#typed-inputs)
 - [Partitions: lead, secondary, ledger](#partitions-lead-secondary-ledger)
 - [Numbers and folios](#numbers-and-folios)
@@ -34,6 +50,9 @@ No `@php`, no `str_pad`, no `slice(3)`.
 - [Menus, tabs and active states](#menus-tabs-and-active-states)
 - [Model presenters](#model-presenters)
 - [Lazy members](#lazy-members)
+- [Cached members](#cached-members)
+- [Formatting](#formatting)
+- [SEO: titles, share cards, JSON-LD](#seo-titles-share-cards-json-ld)
 - [Commands](#commands)
 - [Testing](#testing)
 - [Configuration](#configuration)
@@ -88,8 +107,12 @@ php artisan vendor:publish --tag=intermidiate-stubs    # optional, to customise 
 ## Writing a Presenter
 
 ```bash
-php artisan make:presenter ArchivePresenter --view=date
+php artisan make:presenter archive          # or Archive, or ArchivePresenter
+php artisan make:presenter archive.month    # app/Presenters/Archive/MonthPresenter.php
+php artisan make:presenter Archive --view=date   # another view: adds #[ForView('date')]
 ```
+
+The command adds the `Presenter` suffix itself and creates the Blade file when it doesn't exist yet (`--without-view` skips it). The example below serves `date.blade.php`, so it carries `#[ForView('date')]`; a class named after its view needs no attribute.
 
 ```php
 namespace App\Presenters;
@@ -184,11 +207,32 @@ Attributes refine the export:
 #[Expose('stories')] // exported under another name
 #[ViewOnly]        // in the view, but left out of the JSON
 #[Lazy]            // runs only if the view uses it (see below)
+#[Query]           // on a constructor parameter: filled from ?name= (see pages without controllers)
+#[Paginate] #[Fetch] // on a constructor parameter: filled by a query (see loading models)
+#[Raw]             // models left unwrapped (see model presenters)
+#[Present(Card::class)] // models wrapped in this presenter
 ```
 
 Inside the class, read members as properties to reuse the memoized value: `$this->period` runs `period()` once, while `$this->period()` runs it again. When an input and a member share a name (a private `$stories` input and a public `stories()` member), `$this->stories` reads the input, so route shared work through `$this->once('key', fn () => …)` instead. Override `prepare()` for set-up that should run once before the first member is read (eager loading, for example).
 
 The base class reserves the names of its own methods (`make`, `from`, `view`, `with`, `only`, `except`, `get`, `has`, `toArray`, `render`, `prepare`, `once`…), so don't use them for members. To export a variable with one of those names, give the method another name and add `#[Expose('from')]`. Redeclaring `make()` or `from()` without `static` is a PHP fatal error, and with discovery on it breaks every page, so the mistake shows up on the first request.
+
+## Where Presenters live
+
+You don't register anything. Every Presenter in `app/Presenters` (under your app's namespace from `composer.json`) is found, and one without `#[ForView]` serves the view its path names, when that view exists:
+
+| Class | View |
+| --- | --- |
+| `App\Presenters\ArchivePresenter` | `archive` |
+| `App\Presenters\Archive\MonthPresenter` | `archive.month` |
+| `App\Presenters\Layouts\AppPresenter` | `layouts.app` (every page that uses the layout) |
+| `App\Presenters\MonthlyArchivePresenter` | `monthly-archive`, or `monthly_archive` |
+
+The same name is the view `return ArchivePresenter::make(...)` renders, so `->view()` is optional too.
+
+When a convention-bound view is rendered without the data its Presenter needs (a partial included with other variables, or one that builds the Presenter itself with `@presenter`), the binding steps aside and doesn't fail. A wrong value, such as `"twenty"` for an `int $year`, still fails. Bindings from `#[ForView]` and config always fail loudly.
+
+`#[ForView]` and config bindings are still there for anything else, such as wildcards (`desks.*`), several views or a view under another name. Set `conventions` to `false` to turn naming off. For modules, add their folders to `discover`.
 
 ## Three ways to use one
 
@@ -198,14 +242,14 @@ The base class reserves the names of its own methods (`make`, `from`, `view`, `w
 public function __invoke(int $year, ?int $month = null)
 {
     return ArchivePresenter::make(posts: $this->archive->page($year, $month), year: $year, month: $month);
-        // ->view('date') when there's no #[ForView], or to pick another view
+        // ->view('date') to pick another view than the one the class name gives
         // ->with('extra', $value) for one-off variables
 }
 ```
 
 When the request expects JSON, the same Presenter answers with its members as JSON: closures and `#[ViewOnly]` members are left out, and paginators, groups, calendars and menus serialize themselves. One class can serve the page and the API. Set `json` to `false` to turn this off.
 
-**2. Bind it to a view and leave the controller alone.** With `#[ForView('date')]` (found by discovery) or the config:
+**2. Bind it to a view and leave the controller alone.** By [where it lives](#where-presenters-live), with `#[ForView('date')]`, or in config:
 
 ```php
 // config/intermidiate.php
@@ -222,6 +266,7 @@ Or bind it in code: `Intermidiate::bind('date', ArchivePresenter::class)`.
 **3. Inline, for partials and anonymous components that have no controller:**
 
 ```blade
+@presenter                                          {{-- this view's own Presenter, found by its name --}}
 @presenter(App\Presenters\BylinePresenter::class)
 {{-- or with extra input: @presenter(App\Presenters\BylinePresenter::class, ['compact' => true]) --}}
 
@@ -230,11 +275,112 @@ Or bind it in code: `Intermidiate::bind('date', ArchivePresenter::class)`.
 
 The Presenter is built from the variables in scope, and its members become variables.
 
+## Pages without controllers
+
+```php
+Route::presenter('/desks/{desk}/{reporter:slug}', BeatPresenter::class)->name('beat');
+Route::presenter('/about', AboutPresenter::class, view: 'pages.about');   // another view than the name gives
+```
+
+```php
+final class BeatPresenter extends Presenter
+{
+    public function __construct(
+        public readonly Reporter $reporter,               // {reporter:slug} → Reporter::where('slug', …), or 404
+        public readonly Desk $desk,                       // {desk} → Desk::Sports; /desks/weather is a 404
+        #[Query] public readonly int $page = 1,           // ?page=3
+        #[Query('q')] public readonly ?string $search = null,   // ?q=rain
+        #[Query] public readonly Sort $sort = Sort::Latest,     // ?sort=sideways falls back to Latest
+    ) {}
+}
+```
+
+The route returns the Presenter, so it renders its view, or answers JSON when the request wants JSON. `Route::presenter()` returns the route, so `->name()`, `->middleware()` and `->where()` chain as usual.
+
+Inputs fill themselves from the request wherever a Presenter is built (bound views, `make()`, `from()`, `@presenter`), after the data you pass:
+
+| Source | Fills | When it doesn't fit |
+| --- | --- | --- |
+| route parameters | any parameter of the same name (`{month}` → `?int $month`) | a 404 on `Route::presenter()` pages; elsewhere it's skipped |
+| models in the route | `Post $post` from `{post}` or `{post:slug}`, by the model's route key | a 404 (`ModelNotFoundException`) |
+| query string | only parameters marked `#[Query]`, so a URL can't set anything else | skipped, so the default (or `null`) is used |
+
+The same model lookup applies to data you pass: `view('posts.show', ['post' => 12])` fills a bound Presenter's `Post $post` with post 12.
+
+## Loading models: #[Paginate] and #[Fetch]
+
+Most of what a listing controller does is one query. Declare it on the input instead:
+
+```php
+final class ArchivePresenter extends Presenter
+{
+    public function __construct(
+        public readonly int $year,                               // {year}
+
+        #[Paginate(latest: 'published_at', with: 'author', scopes: 'published')]
+        public readonly LengthAwarePaginator $posts,             // App\Models\Post, from the name
+
+        #[Fetch(scopes: 'featured')]
+        public readonly ?Post $featured,                         // the first match, or null
+
+        #[Fetch(Post::class, limit: 5, latest: 'views')]
+        public readonly Collection $popular,
+
+        public readonly ?int $month = null,                      // {month?}; optional inputs go last
+    ) {}
+
+    // Found by name ("{parameter}Query"), called with the other inputs by name.
+    public static function postsQuery(Builder $query, int $year, ?int $month): Builder
+    {
+        return $query->whereYear('published_at', $year)->when($month, fn ($query) => $query->whereMonth('published_at', $month));
+    }
+}
+```
+
+```php
+Route::presenter('/archive/{year}/{month?}', ArchivePresenter::class);
+```
+
+That's the whole page: the route fills `$year` and `$month`, the query runs with them, the page number comes from `?page=`, the pager links keep the rest of the query string, and the posts reach the view wrapped in their `PostPresenter` if there is one.
+
+| Option | Default |
+| --- | --- |
+| `model` | the parameter's type (`?Post`), else its name singular (`$posts` → `App\Models\Post`, then `App\Post`) |
+| `with`, `withCount` | nothing eager loaded |
+| `latest`, `oldest` | no order |
+| `scopes` | none; local scopes without arguments, `'published'` or `['published', 'visible']` |
+| `query` | the static `{parameter}Query()` method, when there is one |
+| `perPage` (`#[Paginate]`) | the model's `$perPage` (15) |
+| `pageName` (`#[Paginate]`) | `page` |
+| `limit` (`#[Fetch]`) | none |
+
+The declared type decides what you get. With `#[Paginate]`, `LengthAwarePaginator` paginates, `Paginator` simple-paginates and `CursorPaginator` uses a cursor. With `#[Fetch]`, a `Collection` (or `array`) gets every match and a model type gets the first one.
+
+The query runs only when the data doesn't already hold the value, so a controller or test that passes `posts:` runs nothing. It needs `illuminate/database`, which every Laravel app has.
+
+## Inputs that fill themselves
+
+The things a Presenter would otherwise read with `config()`, `auth()`, `old()` or `session()`:
+
+```php
+public function __construct(
+    #[Config('app.name')] public readonly string $siteName,
+    #[Old] public readonly ?string $email = null,               // the form input after a failed submit
+    #[Session('status')] public readonly ?string $status = null, // a flash message
+    #[CurrentUser] public readonly ?User $author = null,         // null for guests
+    public readonly ?User $user = null,                          // $user, $viewer, $currentUser: no attribute needed
+    public readonly string $locale = 'en',                       // the app locale
+    public readonly string $timezone = 'UTC',                    // config app.timezone
+) {}
+```
+
+A non-nullable `#[CurrentUser] User $user` sends guests to log in (`AuthenticationException`). Passed data always wins, and route parameters come before `$user`, so an author page's `{user}` is still that author.
+
 ## Typed inputs
 
 `make()` takes named (or positional) arguments. `from()` takes loose data such as view variables, a request or an array: keys may be snake_case or camelCase, and extra keys are ignored.
 
-Each constructor parameter is filled from the data, then from the container (for services, including optional ones the container has bound), then from its default, then with `null` when it's nullable. In loose data, a variable that only shares a service parameter's name (a page's `$navigation` array reaching a layout presenter's `Navigation $navigation`) is ignored and the service comes from the container; models, enums, dates and collections are never swapped like that, and a wrong value for them still fails. Values are checked against the declared type, and with `coerce` on (the default), loose input is converted:
+Each constructor parameter is filled from the data, then from the route and `#[Query]` (see above), then from the container (for services, including optional ones the container has bound), then from its default, then with `null` when it's nullable. In loose data, a variable that only shares a service parameter's name (a page's `$navigation` array reaching a layout presenter's `Navigation $navigation`) is ignored and the service comes from the container; models, enums, dates and collections are never swapped like that, and a wrong value for them still fails. Values are checked against the declared type, and with `coerce` on (the default), loose input is converted:
 
 | Declared | Accepts |
 | --- | --- |
@@ -242,6 +388,7 @@ Each constructor parameter is filled from the data, then from the container (for
 | `bool` | `"1"`, `"true"`, `"on"`, `"no"`… |
 | `string` | numbers, `Stringable`, backed enums |
 | a backed enum | its value: `"sports"` → `Desk::Sports` |
+| a model (any `UrlRoutable`) | its route key: `"12"` → `Post::find(12)`, or a 404 |
 | `Carbon` / `CarbonImmutable` / `DateTimeInterface` | `"2026-03-01"`, timestamps |
 | `Collection` | arrays |
 | `array` | `Arrayable` |
@@ -442,14 +589,14 @@ Each tab's URL is the current URL with its value. The default tab drops the para
 
 ## Model presenters
 
-Presentation logic for a single model, used inside a Presenter:
+Presentation logic for one model. Name it after the model and it's applied everywhere on its own:
 
 ```bash
-php artisan make:model-presenter StoryCard
+php artisan make:model-presenter Post      # app/Presenters/Models/PostPresenter.php, for App\Models\Post
 ```
 
 ```php
-final class StoryCard extends ModelPresenter
+final class PostPresenter extends ModelPresenter
 {
     public function kicker(): string
     {
@@ -463,20 +610,40 @@ final class StoryCard extends ModelPresenter
 }
 ```
 
-```php
-public function cards(): Collection
-{
-    return $this->present($this->posts, StoryCard::class);    // or StoryCard::collection($posts)
-}
-```
+That's all. Every post a Presenter hands to its view now arrives as a `PostPresenter`: a single `$lead`, a `Collection`, a paginator (still with `links()`, `total()`…) and a `Group` (still with its folios):
 
 ```blade
-@foreach ($cards as $card)
-    <small>{{ $card->kicker }}</small>  {{ $card->title }}  {{ $card->reading_time }}
+@foreach ($ledger->entries() as $entry)
+    <small>{{ $entry->item->kicker }}</small> {{ $entry->title }} · {{ $entry->item->reading_time }}
 @endforeach
+
+<a href="{{ route('posts.show', $lead) }}">{{ $lead->title }}</a>   {{-- the model's route key --}}
 ```
 
-Computed fields run once each. Everything else (properties, relations, methods) is forwarded to the model, and `$card->unwrap()` returns the model itself. `toArray()` and JSON return the model's array form plus the computed fields.
+Computed fields run once each. Everything else (properties, relations, methods) is forwarded to the model, and `$post->unwrap()` returns the model itself. JSON responses get the model's array form plus the computed fields, so the API gets them too. A presented model passed into another Presenter whose parameter is typed `Post $post` is unwrapped for it.
+
+**How the presenter is found**, first match wins:
+
+| Where | Example |
+| --- | --- |
+| `Intermidiate::present(Post::class, StoryCard::class)` or config `models` | any class |
+| `#[Presents(Post::class)]` on the presenter (`make:model-presenter StoryCard --model=Post` writes it) | `App\Presenters\Models\StoryCard` |
+| the model's name below `Presenters\Models` | `App\Models\Blog\Post` → `Presenters\Models\Blog\PostPresenter`, then `Presenters\Models\PostPresenter` |
+| the same for each parent class | a `FeaturedPost extends Post` uses `PostPresenter` |
+
+Models with no presenter, and any other value, pass through untouched. Per member:
+
+```php
+#[Present(StoryRow::class)]    // these models, with another presenter
+public function ledger(): Group
+
+#[Raw]                         // the models as they are
+public function lead(): ?Post
+```
+
+Inside the class nothing changes: `$this->posts` and the other inputs are the models you were given, and so is `$presenter->posts` from outside, because PHP reads public properties directly. Members read through `$presenter->get()`, `$this->lead` (a method member) and the view are presented. To present something you build yourself, call `$this->present($items)`, which finds the presenter the same way, or pass one: `$this->present($items, StoryCard::class)`.
+
+A Blade component whose constructor is typed `Post $post` needs the model: pass `:post="$post->unwrap()"`, or mark the member `#[Raw]`. Set `present` to `false` to wrap only members marked `#[Present]`.
 
 ## Lazy members
 
@@ -490,16 +657,75 @@ public function related(): Collection
 
 The view gets a proxy that resolves on first use: when you echo it, loop over it, count it or read a property or method through it. An object is always truthy, so test it with one of the value's methods (`@if ($related->isNotEmpty())`) or unwrap it (`$related->value()`). Reading `$presenter->related` returns the value itself.
 
+## Cached members
+
+```php
+#[Cached(minutes: 10)]
+public function trending(): Collection
+{
+    return Post::trending()->take(5)->get();
+}
+```
+
+The value is kept across requests. The key is built from the class, the member, the locale and the Presenter's inputs: models by their key and `updated_at`, so an edit shows at once; dates, enums and scalars by value. Options are `seconds`, `minutes` (`null` keeps it forever), `store`, and `tags` for stores that support them. Models are cached as they are and wrapped in their presenter afterwards.
+
+## Formatting
+
+```php
+use Atannex\Intermidiate\Support\Format;
+
+Format::excerpt($post->body, 160);   // tags stripped, entities decoded, whitespace squished, cut at a word: "Rain in Fontem closed…"
+Format::text($html);                 // the same, without the cut
+Format::date($post->published_at);   // "7 Mar 2026" in app.timezone and the app locale
+Format::date($date, 'long');         // short "7 Mar", medium "7 Mar 2026", long "7 March 2026", full "Saturday 7 March 2026",
+                                     // month "Mar 2026", time, datetime, your own from config `dates`, or a format string
+Format::relative($date);             // "3 hours ago", then the date once it's a week old (relative($date, days: 1))
+Format::iso($date);                  // "2026-03-07T08:00:00+01:00"
+Format::count(3, 'story');           // "3 stories", or your ":count story|:count stories" translation
+Format::initials('Ma Ngum');         // "MN"
+Format::readingTime($post->body);    // 4 (minutes)
+```
+
+## SEO: titles, share cards, JSON-LD
+
+Put `@meta` in the layout's `<head>`. It prints `<title>`, the description, canonical, robots, Open Graph, Twitter and JSON-LD tags. Text is stripped, decoded, trimmed (title 95, description 160) and escaped once. The title gets the site name: `Rain in Fontem · Atannex`.
+
+Where it reads from, first match wins:
+
+1. a `$meta` variable, or a `meta(): Meta` member on any Presenter in the view;
+2. otherwise a guess from the variables (`$metaTitle`, `$seoTitle`, `$title`, `$headline`; `$metaDescription`, `$description`, `$excerpt`; `$ogImage`, `$image`; `$canonical`; `$robots`) and the sections (`@section('title')`, `@section('meta:description')`, `og:image`, `canonical`, `robots`).
+
+```php
+public function meta(): Meta
+{
+    return Meta::make()
+        ->title($this->post->title)
+        ->description($this->post->body)                  // HTML is fine
+        ->image($this->post->image_url)                   // made absolute
+        ->article($this->post->published_at, author: $this->post->author->name, section: $this->post->desk->label())
+        ->breadcrumbs($this->menu->trail());              // or ['Home' => '/', 'Weather' => '/weather']
+}
+```
+
+The canonical URL defaults to the page without its query string, keeping `?page=` from page 2 on. `->noindex()` hides filtered or search pages. `->schema(JsonLd::make('Event', [...]))` adds any other structured data. `JsonLd::article()`, `breadcrumbs()`, `organization()` and `website()` cover the usual ones, encoded so they're safe in a `<script>` tag. Config `seo` holds the site name, separator, length limits and Twitter handle.
+
 ## Commands
 
 ```bash
-php artisan make:presenter ArchivePresenter --view=date   # app/Presenters, with #[ForView('date')]
-php artisan make:model-presenter StoryCard                 # app/Presenters/Models
+php artisan make:presenter archive.month                  # app/Presenters/Archive/MonthPresenter.php + its view
+php artisan make:presenter Archive --view=date             # bound to another view with #[ForView('date')]
+php artisan make:model-presenter Post                      # app/Presenters/Models/PostPresenter, used for every Post
+php artisan make:model-presenter StoryCard --model=Post    # another name, with #[Presents(Post::class)]
 php artisan presenter:list                                # every bound Presenter, its views and variables with types
 php artisan presenter:list ArchivePresenter --json
 php artisan presenter:cache                               # cache discovery (also run by `php artisan optimize`)
 php artisan presenter:clear
+php artisan presenter:tidy                                # list wiring the conventions already do
+php artisan presenter:tidy --fix                          # @presenter(\App\Presenters\X\YPresenter::class) in x/y.blade.php → @presenter
+php artisan presenter:tidy --fix --attributes             # also drop #[ForView('x.y')] on X\YPresenter
 ```
+
+A bare `@presenter` builds the view's own Presenter: the one bound to that exact view name, or the one its path implies (`components/news/reel.blade.php` → `Presenters\Components\News\ReelPresenter`). `@presenter(['compact' => true])` passes extra input. Removing `#[ForView]` makes the binding a convention one, which steps aside, rather than failing, when the view lacks the Presenter's inputs.
 
 ```
 App\Presenters\ArchivePresenter ........................................ date
@@ -535,7 +761,10 @@ This works whether the controller returned the Presenter, a binding built it, or
 ```php
 return [
     'bindings' => [],                                   // view => Presenter class(es); wildcards allowed
-    'discover' => ['App\\Presenters' => app_path('Presenters')],  // scanned for #[ForView]
+    'discover' => null,                                 // null: App\Presenters in app/Presenters; or namespace => folder
+    'conventions' => true,                              // ArchivePresenter serves archive.blade.php
+    'present' => true,                                  // models reach views wrapped in their ModelPresenter
+    'models' => [],                                     // model => ModelPresenter, ahead of #[Presents] and names
     'cache' => base_path('bootstrap/cache/intermidiate.php'),
     'variable' => 'presenter',                          // the Presenter inside its view; null turns it off
     'coerce' => true,                                   // convert strings to the declared types

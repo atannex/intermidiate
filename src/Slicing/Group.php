@@ -151,6 +151,12 @@ final class Group implements Arrayable, Countable, IteratorAggregate, JsonSerial
         return $this->with(array_values(array_filter($this->slots, fn (array $slot) => $callback($slot[1]))));
     }
 
+    /** A new group with every item passed through the callback; numbers are kept. */
+    public function map(callable $callback): self
+    {
+        return $this->with(array_map(fn (array $slot) => [$slot[0], $callback($slot[1])], $this->slots));
+    }
+
     /** The first $count items, numbers kept. */
     public function take(int $count): self
     {

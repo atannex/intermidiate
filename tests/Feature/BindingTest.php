@@ -6,6 +6,7 @@ namespace Atannex\Intermidiate\Tests\Feature;
 
 use Atannex\Intermidiate\Facades\Intermidiate;
 use Atannex\Intermidiate\Tests\Fixtures\Presenters\ArchivePresenter;
+use Atannex\Intermidiate\Tests\Fixtures\Presenters\BylinePresenter;
 use Atannex\Intermidiate\Tests\Fixtures\Presenters\DeskPresenter;
 use Atannex\Intermidiate\Tests\Fixtures\SharedPresenter;
 use Atannex\Intermidiate\Tests\TestCase;
@@ -35,19 +36,41 @@ final class BindingTest extends TestCase
             ->assertPresenter(ArchivePresenter::class, fn (ArchivePresenter $presenter) => $presenter->year === 2026);
     }
 
-    public function test_discovery_finds_for_view_attributes_and_skips_abstract_classes(): void
+    public function test_discovery_finds_attributes_and_conventions_and_skips_abstract_classes(): void
     {
-        $this->assertSame([ArchivePresenter::class => ['archive']], Intermidiate::discovered());
-        $this->assertArrayHasKey(ArchivePresenter::class, Intermidiate::bindings());
+        $this->assertSame([
+            ArchivePresenter::class => ['archive'],
+            BylinePresenter::class => ['byline'],
+            DeskPresenter::class => ['desk'],
+        ], Intermidiate::discovered());
+
+        $this->assertArrayHasKey(DeskPresenter::class, Intermidiate::bindings());
+    }
+
+    public function test_a_presenter_named_after_a_view_is_bound_to_it_with_no_attribute_or_config(): void
+    {
+        $html = View::make('desk', ['desk' => 'economy', 'page' => '5'])->render();
+
+        $this->assertSame('<h1>Economy desk</h1><p>Page 5 Economy desk today</p>', trim($html));
+    }
+
+    public function test_conventions_can_be_turned_off(): void
+    {
+        $intermidiate = new \Atannex\Intermidiate\Intermidiate(fn () => $this->app['view'], Intermidiate::namespaces(), conventions: false);
+
+        $this->assertSame([ArchivePresenter::class => ['archive']], $intermidiate->discovered());
+        $this->assertNull($intermidiate->conventionalView(DeskPresenter::class));
     }
 
     public function test_bindings_from_code_and_wildcards(): void
     {
+        DeskPresenter::$prepared = 0;
         Intermidiate::bind('des*', DeskPresenter::class);
 
         $html = View::make('desk', ['desk' => 'economy', 'page' => '5'])->render();
 
         $this->assertSame('<h1>Economy desk</h1><p>Page 5 Economy desk today</p>', trim($html));
+        $this->assertSame(1, DeskPresenter::$prepared, 'Bound by convention and by wildcard, it is still built once.');
     }
 
     public function test_a_view_that_already_has_the_presenter_is_left_alone(): void

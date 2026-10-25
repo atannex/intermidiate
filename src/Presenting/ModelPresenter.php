@@ -9,6 +9,7 @@ use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Support\Member;
 use Atannex\Intermidiate\Support\Schema;
 use Illuminate\Contracts\Pagination\CursorPaginator;
+use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Collection;
@@ -26,14 +27,15 @@ use JsonSerializable;
  *     {{ $card->kicker }}  {{ $card->title }}   {{-- computed, then forwarded --}}
  *
  * Computed fields run once per presenter. A method of the subject can be
- * called through the presenter too.
+ * called through the presenter too, and route('posts.show', $card) uses
+ * the model's route key.
  *
  * @template TSubject
  *
  * @implements ArrayAccess<string, mixed>
  * @implements Arrayable<string, mixed>
  */
-abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializable
+abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializable, UrlRoutable
 {
     /** @var array<string, mixed> */
     private array $computed = [];
@@ -149,6 +151,36 @@ abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializabl
     public function jsonSerialize(): array
     {
         return $this->toArray();
+    }
+
+    public function getRouteKey(): mixed
+    {
+        if ($this->subject instanceof UrlRoutable) {
+            return $this->subject->getRouteKey();
+        }
+
+        return is_array($this->subject) ? ($this->subject['id'] ?? null) : ($this->subject->id ?? null);
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return $this->subject instanceof UrlRoutable ? $this->subject->getRouteKeyName() : 'id';
+    }
+
+    /** @return static|null */
+    public function resolveRouteBinding($value, $field = null): ?static
+    {
+        $model = $this->subject instanceof UrlRoutable ? $this->subject->resolveRouteBinding($value, $field) : null;
+
+        return $model === null ? null : new static($model);
+    }
+
+    /** @return static|null */
+    public function resolveChildRouteBinding($childType, $value, $field): ?static
+    {
+        $model = $this->subject instanceof UrlRoutable ? $this->subject->resolveChildRouteBinding($childType, $value, $field) : null;
+
+        return $model === null ? null : new static($model);
     }
 
     private function member(string $name): ?Member
