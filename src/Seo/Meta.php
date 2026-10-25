@@ -259,12 +259,18 @@ final class Meta implements Htmlable, Stringable
             return $site;
         }
 
-        $title = mb_substr($this->title, 0, (int) Settings::get('seo.title_limit', 95));
+        $limit = (int) Settings::get('seo.title_limit', 95);
 
-        // Titles that already name the site (an app's own seo_title()) aren't suffixed twice.
-        $suffix = $this->suffix && Settings::get('seo.suffix', true) && $site !== '' && ! str_contains(mb_strtolower($title), mb_strtolower($site));
+        // A title that already names the site (an app's own seo_title()) is used whole:
+        // cutting it would drop the name, and suffixing it would repeat it.
+        if (! $this->suffix || ! Settings::get('seo.suffix', true) || $site === '' || str_contains(mb_strtolower($this->title), mb_strtolower($site))) {
+            return $this->title;
+        }
 
-        return $suffix ? $title.Settings::get('seo.separator', ' · ').$site : $title;
+        // Otherwise the headline is cut at a word so headline and suffix fit the limit together.
+        $suffix = Settings::get('seo.separator', ' · ').$site;
+
+        return Format::excerpt($this->title, max(10, $limit - mb_strlen($suffix) - 1)).$suffix;
     }
 
     /** The canonical URL: as set, or this page without its query string (page 2+ keeps ?page). */

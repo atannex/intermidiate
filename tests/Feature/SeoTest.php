@@ -89,6 +89,19 @@ final class SeoTest extends TestCase
         $this->assertStringContainsString('<title>Full &amp; suffixed – Site</title>', View::make('share')->render());
     }
 
+    public function test_long_titles_keep_the_site_name_and_whole_words(): void
+    {
+        config(['app.name' => 'ATANNEX']);
+        $own = str_repeat('Ndop farmers welcome rain ', 4).'– ATANNEX';
+        $this->assertSame($own, Meta::make()->title($own)->fullTitle(), 'already names the site: whole, not cut, not suffixed');
+
+        $long = Meta::make()->title(str_repeat('Ndop farmers welcome rain ', 6))->fullTitle();
+        $this->assertMatchesRegularExpression('/ (Ndop|farmers|welcome|rain)… · ATANNEX$/', $long, 'cut at a whole word, suffix kept');
+        $this->assertLessThanOrEqual(95, mb_strlen($long));
+
+        $this->assertSame('Short · ATANNEX', Meta::make()->title('Short')->fullTitle());
+    }
+
     public function test_the_website_search_action(): void
     {
         $data = JsonLd::website('Atannex', 'https://atannex.test', 'https://atannex.test/search?q={search_term_string}')->toArray();
