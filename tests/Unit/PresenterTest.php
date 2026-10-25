@@ -16,6 +16,7 @@ use Atannex\Intermidiate\Support\Schema;
 use Atannex\Intermidiate\Tests\Fixtures\Desk;
 use Atannex\Intermidiate\Tests\Fixtures\Presenters\ArchivePresenter;
 use Atannex\Intermidiate\Tests\Fixtures\Presenters\DeskPresenter;
+use Atannex\Intermidiate\Tests\Fixtures\SharedPresenter;
 use Atannex\Intermidiate\Tests\TestCase;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -163,6 +164,14 @@ final class PresenterTest extends TestCase
         DeskPresenter::from(['desk' => 'weather']);
     }
 
+    public function test_a_clashing_name_only_falls_back_to_services_in_loose_data(): void
+    {
+        $this->assertSame('x tick', SharedPresenter::from(['sharedTitle' => 'x', 'navigation' => 'not a service'])->headline);
+
+        $this->expectException(InvalidViewData::class);
+        SharedPresenter::make(sharedTitle: 'x', navigation: 'not a service');
+    }
+
     public function test_coercion_can_be_turned_off(): void
     {
         config(['intermidiate.coerce' => false]);
@@ -213,7 +222,7 @@ final class PresenterTest extends TestCase
         Schema::of(Duplicate::class);
     }
 
-    public function test_a_view_model_without_a_view_says_so(): void
+    public function test_a_presenter_without_a_view_says_so(): void
     {
         $this->expectExceptionMessage('has no view');
 

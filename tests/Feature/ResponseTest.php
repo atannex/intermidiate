@@ -23,7 +23,7 @@ final class ResponseTest extends TestCase
         Route::get('/desks/{desk}', fn (string $desk) => DeskPresenter::from(['desk' => $desk, 'page' => request('page', 1)])->view('desk'));
     }
 
-    public function test_a_returned_view_model_renders_its_view(): void
+    public function test_a_returned_presenter_renders_its_view(): void
     {
         $response = $this->get('/archive/2026?page=2');
 
@@ -39,7 +39,7 @@ final class ResponseTest extends TestCase
             ->assertPresenter(ArchivePresenter::class, fn (ArchivePresenter $presenter) => $presenter->lead->id === 11);
     }
 
-    public function test_the_same_view_model_answers_json(): void
+    public function test_the_same_presenter_answers_json(): void
     {
         $this->getJson('/desks/sports?page=2')
             ->assertOk()

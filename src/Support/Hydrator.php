@@ -9,6 +9,7 @@ use Atannex\Intermidiate\Exceptions\MissingViewData;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Container\BindingResolutionException;
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Str;
 use ReflectionClass;
 use ReflectionNamedType;
@@ -61,7 +62,7 @@ final class Hydrator
             [$found, $value] = self::find($data, $parameter, $loose);
 
             if ($found) {
-                $arguments[$name] = self::cast($class, $parameter, $value, $coerce);
+                $arguments[$name] = self::cast($class, $parameter, $value, $coerce, $loose);
             } elseif ($parameter->isDefaultValueAvailable() && ! self::bound($parameter)) {
                 continue;
             } elseif (($service = self::service($parameter)) !== null) {
@@ -98,7 +99,7 @@ final class Hydrator
         return [false, null];
     }
 
-    private static function cast(string $class, ReflectionParameter $parameter, mixed $value, bool $coerce): mixed
+    private static function cast(string $class, ReflectionParameter $parameter, mixed $value, bool $coerce, bool $loose = false): mixed
     {
         $type = $parameter->getType();
 
@@ -114,7 +115,31 @@ final class Hydrator
             }
         }
 
+        // In view data, a variable that merely shares a service parameter's name
+        // (a page's $navigation reaching a layout's Navigation $navigation).
+        if ($loose && self::isService($parameter) && ($service = self::service($parameter)) !== null) {
+            return $service;
+        }
+
         throw InvalidViewData::for($class, $parameter->getName(), (string) $type, $value);
+    }
+
+    /** A class-typed parameter for a service: not a model, enum, date or collection. */
+    private static function isService(ReflectionParameter $parameter): bool
+    {
+        $type = $parameter->getType();
+
+        if (! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
+            return false;
+        }
+
+        $name = $type->getName();
+
+        return ! enum_exists($name)
+            && ! is_a($name, 'Illuminate\Database\Eloquent\Model', true)
+            && ! is_a($name, \DateTimeInterface::class, true)
+            && ! is_a($name, \Traversable::class, true)
+            && ! is_a($name, Arrayable::class, true);
     }
 
     /** An optional service parameter is still filled when the container has it bound. */

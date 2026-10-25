@@ -53,7 +53,7 @@ final class CommandsTest extends TestCase
         $this->artisan('presenter:list', ['class' => 'Nope'])->assertFailed();
     }
 
-    public function test_make_view_model_and_presenter(): void
+    public function test_make_presenter_and_model_presenter(): void
     {
         $this->artisan('make:presenter', ['name' => 'ArchivePresenter', '--view' => 'date'])->assertSuccessful();
 

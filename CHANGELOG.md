@@ -9,6 +9,7 @@
 - `Calendar`: year and month calendars with padded parameters, translated names, filled/current/today flags, counts, links and route parameters.
 - `Pages`: windowed pager links with gaps, padded page numbers, fractions and ranges.
 - `Menu` / `Item` / `Tabs`: active state from the request (exact URL > pattern > section), trails, classes and attributes; enum-backed, validated query tabs.
+- View bindings include shared view data (`$errors`, `View::share()`); a view variable that only shares a service parameter's name no longer breaks the presenter.
 - `ModelPresenter`: computed fields over a model, forwarding everything else.
 - `Numeral`: pad, fraction, ordinal, roman, short, percent, bar.
 - Commands: `make:presenter`, `make:model-presenter`, `presenter:list`, `presenter:cache`, `presenter:clear`. `TestResponse::assertPresenter()`.

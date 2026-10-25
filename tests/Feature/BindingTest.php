@@ -7,6 +7,7 @@ namespace Atannex\Intermidiate\Tests\Feature;
 use Atannex\Intermidiate\Facades\Intermidiate;
 use Atannex\Intermidiate\Tests\Fixtures\Presenters\ArchivePresenter;
 use Atannex\Intermidiate\Tests\Fixtures\Presenters\DeskPresenter;
+use Atannex\Intermidiate\Tests\Fixtures\SharedPresenter;
 use Atannex\Intermidiate\Tests\TestCase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
@@ -25,7 +26,7 @@ final class BindingTest extends TestCase
         Route::get('/author', fn () => view('author', ['name' => 'Ngwa']));
     }
 
-    public function test_a_bound_view_gets_its_view_model_from_its_own_data(): void
+    public function test_a_bound_view_gets_its_presenter_from_its_own_data(): void
     {
         $this->get('/raw/2026')
             ->assertOk()
@@ -49,7 +50,7 @@ final class BindingTest extends TestCase
         $this->assertSame('<h1>Economy desk</h1><p>Page 5 Economy desk today</p>', trim($html));
     }
 
-    public function test_a_view_that_already_has_the_view_model_is_left_alone(): void
+    public function test_a_view_that_already_has_the_presenter_is_left_alone(): void
     {
         $presenter = ArchivePresenter::make(posts: $this->stories(3), year: 2027);
 
@@ -58,7 +59,18 @@ final class BindingTest extends TestCase
         $this->assertStringContainsString('<h1>2027</h1>', $html);
     }
 
-    public function test_only_view_models_can_be_bound(): void
+    public function test_bound_presenters_see_shared_data_and_ignore_clashing_names(): void
+    {
+        View::share('sharedTitle', 'Shared');
+        Intermidiate::bind('shared', SharedPresenter::class);
+
+        // $navigation here is page data, not the Clockwork service the presenter asks for.
+        $html = View::make('shared', ['navigation' => ['home', 'news']])->render();
+
+        $this->assertSame('<p>Shared tick</p>', trim($html));
+    }
+
+    public function test_only_presenters_can_be_bound(): void
     {
         $this->expectExceptionMessage("doesn't extend");
 

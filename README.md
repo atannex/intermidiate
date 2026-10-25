@@ -186,9 +186,9 @@ Attributes refine the export:
 #[Lazy]            // runs only if the view uses it (see below)
 ```
 
-Inside the class, read members as properties to reuse the memoized value: `$this->period` runs `period()` once, while `$this->period()` runs it again. For work several members share, use `$this->once('key', fn () => …)`. Override `prepare()` for set-up that should run once before the first member is read (eager loading, for example).
+Inside the class, read members as properties to reuse the memoized value: `$this->period` runs `period()` once, while `$this->period()` runs it again. When an input and a member share a name (a private `$stories` input and a public `stories()` member), `$this->stories` reads the input, so route shared work through `$this->once('key', fn () => …)` instead. Override `prepare()` for set-up that should run once before the first member is read (eager loading, for example).
 
-The base class reserves the names of its own methods (`view`, `with`, `only`, `except`, `get`, `has`, `toArray`, `render`…), so don't use them for members.
+The base class reserves the names of its own methods (`make`, `from`, `view`, `with`, `only`, `except`, `get`, `has`, `toArray`, `render`, `prepare`, `once`…), so don't use them for members. To export a variable with one of those names, give the method another name and add `#[Expose('from')]`. Redeclaring `make()` or `from()` without `static` is a PHP fatal error, and with discovery on it breaks every page, so the mistake shows up on the first request.
 
 ## Three ways to use one
 
@@ -215,7 +215,7 @@ When the request expects JSON, the same Presenter answers with its members as JS
 ],
 ```
 
-The controller keeps passing raw data with `return view('date', compact('posts', 'year', 'month', 'monthsWithPosts'))`. Before the view renders, the Presenter is built from that data (`months_with_posts` fills `$monthsWithPosts` too) and its members are added. If the controller already passed the Presenter, the binding steps aside.
+The controller keeps passing raw data with `return view('date', compact('posts', 'year', 'month', 'monthsWithPosts'))`. Before the view renders, the Presenter is built from that data (`months_with_posts` fills `$monthsWithPosts` too) and its members are added. Shared view data (`$errors`, anything from `View::share()`) is included too. If the controller already passed the Presenter, the binding steps aside.
 
 Or bind it in code: `Intermidiate::bind('date', ArchivePresenter::class)`.
 
@@ -234,7 +234,7 @@ The Presenter is built from the variables in scope, and its members become varia
 
 `make()` takes named (or positional) arguments. `from()` takes loose data such as view variables, a request or an array: keys may be snake_case or camelCase, and extra keys are ignored.
 
-Each constructor parameter is filled from the data, then from the container (for services, including optional ones the container has bound), then from its default, then with `null` when it's nullable. Values are checked against the declared type, and with `coerce` on (the default), loose input is converted:
+Each constructor parameter is filled from the data, then from the container (for services, including optional ones the container has bound), then from its default, then with `null` when it's nullable. In loose data, a variable that only shares a service parameter's name (a page's `$navigation` array reaching a layout presenter's `Navigation $navigation`) is ignored and the service comes from the container; models, enums, dates and collections are never swapped like that, and a wrong value for them still fails. Values are checked against the declared type, and with `coerce` on (the default), loose input is converted:
 
 | Declared | Accepts |
 | --- | --- |

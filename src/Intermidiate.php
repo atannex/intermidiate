@@ -71,7 +71,12 @@ final class Intermidiate
             }
         }
 
-        $instance = $presenter::from($data);
+        // Shared data ($errors, View::share()) isn't merged into a view until it renders.
+        $factory = ($this->views)();
+        $shared = method_exists($factory, 'getShared') ? $factory->getShared() : [];
+        unset($shared['__env'], $shared['app']);
+
+        $instance = $presenter::from([...$shared, ...$data]);
         $view->with($instance->toArray());
 
         return $this->track($instance);
