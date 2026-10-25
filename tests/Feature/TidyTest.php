@@ -62,7 +62,8 @@ final class TidyTest extends TestCase
         $this->assertStringContainsString('BylinePresenter::class, [', $view, 'another class, or extra data: left alone');
 
         $class = (string) file_get_contents(self::CLASS_FILE);
-        $this->assertStringNotContainsString('ForView', $class);
-        $this->assertStringContainsString("use Atannex\\Intermidiate\\Presenter;\n\nfinal class SamplePresenter", $class);
+        $this->assertStringNotContainsString("#[ForView('", $class);
+        $this->assertStringNotContainsString('use Atannex\\Intermidiate\\Attributes\\ForView;', $class);
+        $this->assertStringContainsString("use Atannex\\Intermidiate\\Presenter;\n\n/** Bound by", $class);
     }
 }

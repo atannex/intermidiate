@@ -66,6 +66,17 @@ final class AmbientTest extends TestCase
         $this->assertSame($ma, $presenter->author);
     }
 
+    public function test_parameters_with_a_default_keep_their_own_meaning(): void
+    {
+        $this->actingAs(new GenericUser(['id' => 1]));
+
+        $presenter = FolioPresenter::make();
+
+        $this->assertNull($presenter->timezone, 'its own fallback still runs');
+        $this->assertNull($presenter->user, 'an author, not the viewer');
+        $this->assertSame('en-GB', $presenter->locale);
+    }
+
     public function test_a_required_user_sends_guests_to_log_in(): void
     {
         $this->expectException(AuthenticationException::class);
@@ -78,9 +89,9 @@ final class SitePresenter extends Presenter
 {
     public function __construct(
         #[Config('app.name')] public readonly string $siteName,
+        public readonly string $locale,
+        public readonly string $timezone,
         #[Config('nope.missing')] public readonly string $missing = 'fallback',
-        public readonly string $locale = 'en',
-        public readonly string $timezone = 'UTC',
     ) {}
 }
 
@@ -96,8 +107,18 @@ final class FormPresenter extends Presenter
 final class ViewerPresenter extends Presenter
 {
     public function __construct(
-        public readonly ?Authenticatable $user = null,
+        public readonly ?Authenticatable $user,
         #[CurrentUser] public readonly ?Authenticatable $author = null,
+    ) {}
+}
+
+final class FolioPresenter extends Presenter
+{
+    public function __construct(
+        public readonly ?string $timezone = null,
+        // A concrete user class, as in an app (the container binds the Authenticatable contract itself).
+        public readonly ?GenericUser $user = null,
+        public readonly string $locale = 'en-GB',
     ) {}
 }
 

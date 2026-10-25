@@ -64,7 +64,9 @@ final class Ambient
 
     /**
      * Unmarked parameters known by name: a user-typed $user (or $viewer…),
-     * string $locale and string $timezone.
+     * string $locale and string $timezone. Only when the parameter has no
+     * default: `?User $user = null` or `?string $timezone = null` keeps its
+     * own meaning (an author, a fallback of its own).
      *
      * @return array{bool, mixed}
      */
@@ -73,7 +75,7 @@ final class Ambient
         $type = $parameter->getType();
         $name = $parameter->getName();
 
-        if (! $type instanceof ReflectionNamedType) {
+        if (! $type instanceof ReflectionNamedType || $parameter->isDefaultValueAvailable()) {
             return [false, null];
         }
 

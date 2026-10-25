@@ -365,14 +365,16 @@ The things a Presenter would otherwise read with `config()`, `auth()`, `old()` o
 ```php
 public function __construct(
     #[Config('app.name')] public readonly string $siteName,
+    public readonly ?User $user,                                 // $user, $viewer, $currentUser: the signed-in user
+    public readonly string $locale,                              // the app locale
+    public readonly string $timezone,                            // config app.timezone
     #[Old] public readonly ?string $email = null,               // the form input after a failed submit
     #[Session('status')] public readonly ?string $status = null, // a flash message
-    #[CurrentUser] public readonly ?User $author = null,         // null for guests
-    public readonly ?User $user = null,                          // $user, $viewer, $currentUser: no attribute needed
-    public readonly string $locale = 'en',                       // the app locale
-    public readonly string $timezone = 'UTC',                    // config app.timezone
+    #[CurrentUser] public readonly ?User $viewer = null,         // null for guests
 ) {}
 ```
+
+The names (`$user`, `$locale`, `$timezone`) only fill parameters without a default. A `?User $user = null` (an author, say) or a `?string $timezone = null` with a fallback of its own keeps its meaning. The attributes always apply.
 
 A non-nullable `#[CurrentUser] User $user` sends guests to log in (`AuthenticationException`). Passed data always wins, and route parameters come before `$user`, so an author page's `{user}` is still that author.
 

@@ -74,6 +74,18 @@ final class TidyCommand extends Command
         return self::SUCCESS;
     }
 
+    /** Whether PHP code (not comments or strings) names this class. */
+    private static function uses(string $code, string $name): bool
+    {
+        foreach (token_get_all($code) as $token) {
+            if (is_array($token) && in_array($token[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED], true) && class_basename($token[1]) === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @return list<array{string, string}> [file, view name] */
     private function views(Filesystem $files): array
     {
@@ -119,9 +131,12 @@ final class TidyCommand extends Command
             if ($fix) {
                 $updated = str_replace($match[0], '', $contents);
 
-                // Only the import mentions it now.
-                if (substr_count($updated, 'ForView') === 1) {
-                    $updated = (string) preg_replace('/^use Atannex\\\\Intermidiate\\\\Attributes\\\\ForView;\R/m', '', $updated);
+                $import = '/^use Atannex\\\\Intermidiate\\\\Attributes\\\\ForView;\R/m';
+                $without = (string) preg_replace($import, '', $updated);
+
+                // Drop the import when nothing but comments still mention it.
+                if (! self::uses($without, 'ForView')) {
+                    $updated = $without;
                 }
 
                 $files->put($file, $updated);
