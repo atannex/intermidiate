@@ -6,9 +6,9 @@ namespace Atannex\Intermidiate;
 
 use ArrayAccess;
 use ArrayIterator;
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Exceptions\UnknownMember;
-use Atannex\Intermidiate\Exceptions\ViewModelException;
-use Atannex\Intermidiate\Presenting\Presenter;
+use Atannex\Intermidiate\Presenting\ModelPresenter;
 use Atannex\Intermidiate\Slicing\Partition;
 use Atannex\Intermidiate\Support\Deferred;
 use Atannex\Intermidiate\Support\Hydrator;
@@ -34,18 +34,18 @@ use Traversable;
  * Everything a view needs, worked out before it renders.
  *
  * Public properties and public methods are the view's variables: a method
- * without parameters is called once and its result shared (so `$vm->lead`
+ * without parameters is called once and its result shared (so `$presenter->lead`
  * and `$lead` are the same value), a method with parameters arrives as a
  * closure. Constructor parameters are the inputs; give them types and the
  * package checks (and, from strings, converts) whatever is passed in.
  *
- *     return ArchiveViewModel::make(posts: $posts, year: $year)->view('date');
+ *     return ArchivePresenter::make(posts: $posts, year: $year)->view('date');
  *
  * @implements ArrayAccess<string, mixed>
  * @implements Arrayable<string, mixed>
  * @implements IteratorAggregate<string, mixed>
  */
-abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, JsonSerializable, Responsable
+abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, JsonSerializable, Responsable
 {
     /** @var array<string, mixed> */
     private array $resolved = [];
@@ -58,7 +58,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     private bool $prepared = false;
 
     /**
-     * Builds the ViewModel by name (or position), checking every value
+     * Builds the Presenter by name (or position), checking every value
      * against its declared type. Services the constructor type-hints come
      * from the container.
      */
@@ -68,7 +68,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * Builds the ViewModel from loose data, such as a view's variables or a
+     * Builds the Presenter from loose data, such as a view's variables or a
      * request: keys may be snake_case or camelCase, and extra keys are ignored.
      *
      * @param  array<string, mixed>|Arrayable<string, mixed>  $data
@@ -79,7 +79,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * The view this ViewModel renders when returned from a controller.
+     * The view this Presenter renders when returned from a controller.
      *
      * @param  array<string, mixed>  $data  extra variables
      */
@@ -114,7 +114,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * The view variables: every member, the extras, and the ViewModel itself
+     * The view variables: every member, the extras, and the Presenter itself
      * under config intermidiate.variable.
      *
      * @return array<string, mixed>
@@ -131,7 +131,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
 
         $data = [...$data, ...$this->extra];
 
-        if (is_string($variable = Settings::get('variable', 'vm')) && $variable !== '') {
+        if (is_string($variable = Settings::get('variable', 'presenter')) && $variable !== '') {
             $data[$variable] = $this;
         }
 
@@ -139,7 +139,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * Only these variables, for `@include('partial', $vm->only('lead', 'beside'))`.
+     * Only these variables, for `@include('partial', $presenter->only('lead', 'beside'))`.
      *
      * @return array<string, mixed>
      */
@@ -185,7 +185,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     public function toView(): View
     {
         $view = $this->template()
-            ?? throw new ViewModelException(static::class.' has no view. Call ->view(\'name\') or add #[ForView(\'name\')].');
+            ?? throw new PresenterException(static::class.' has no view. Call ->view(\'name\') or add #[ForView(\'name\')].');
 
         return Container::getInstance()->make(Factory::class)->make($view, $this->toArray());
     }
@@ -256,12 +256,12 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
 
     public function offsetSet(mixed $offset, mixed $value): void
     {
-        throw new ViewModelException(static::class.' is read-only in the view. Use ->with() before rendering.');
+        throw new PresenterException(static::class.' is read-only in the view. Use ->with() before rendering.');
     }
 
     public function offsetUnset(mixed $offset): void
     {
-        throw new ViewModelException(static::class.' is read-only in the view.');
+        throw new PresenterException(static::class.' is read-only in the view.');
     }
 
     public function getIterator(): Traversable
@@ -276,7 +276,7 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     protected function prepare(): void {}
 
     /**
-     * Remembers a value for the life of this ViewModel, for protected
+     * Remembers a value for the life of this Presenter, for protected
      * helpers that several members call.
      *
      * @template T
@@ -306,9 +306,9 @@ abstract class ViewModel implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * Wraps each item in a presenter.
+     * Wraps each item in a model presenter.
      *
-     * @template P of Presenter
+     * @template P of ModelPresenter
      *
      * @param  iterable<mixed>  $items
      * @param  class-string<P>  $presenter

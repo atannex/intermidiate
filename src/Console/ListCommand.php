@@ -5,20 +5,20 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Console;
 
 use Atannex\Intermidiate\Intermidiate;
+use Atannex\Intermidiate\Presenter;
 use Atannex\Intermidiate\Support\Member;
 use Atannex\Intermidiate\Support\Schema;
-use Atannex\Intermidiate\ViewModel;
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
 
-#[AsCommand(name: 'view-model:list', description: 'List ViewModels, the views they are bound to and the variables they export')]
+#[AsCommand(name: 'presenter:list', description: 'List Presenters, the views they are bound to and the variables they export')]
 final class ListCommand extends Command
 {
-    protected $signature = 'view-model:list
-        {class? : Show one ViewModel in full}
+    protected $signature = 'presenter:list
+        {class? : Show one Presenter in full}
         {--json : Print JSON}';
 
-    protected $description = 'List ViewModels, the views they are bound to and the variables they export';
+    protected $description = 'List Presenters, the views they are bound to and the variables they export';
 
     public function handle(Intermidiate $intermidiate): int
     {
@@ -32,7 +32,7 @@ final class ListCommand extends Command
             $class = $this->qualify((string) $class, array_keys($bindings));
 
             if ($class === null) {
-                $this->components->error("No ViewModel matches \"{$this->argument('class')}\".");
+                $this->components->error("No Presenter matches \"{$this->argument('class')}\".");
 
                 return self::FAILURE;
             }
@@ -56,7 +56,7 @@ final class ListCommand extends Command
         }
 
         if ($rows === []) {
-            $this->components->info('No ViewModels are bound to views yet. Add #[ForView(\'name\')] or config intermidiate.bindings.');
+            $this->components->info('No Presenters are bound to views yet. Add #[ForView(\'name\')] or config intermidiate.bindings.');
 
             return self::SUCCESS;
         }
@@ -77,11 +77,11 @@ final class ListCommand extends Command
 
     /**
      * @param  list<string>  $known
-     * @return class-string<ViewModel>|null
+     * @return class-string<Presenter>|null
      */
     private function qualify(string $class, array $known): ?string
     {
-        if (is_subclass_of($class, ViewModel::class)) {
+        if (is_subclass_of($class, Presenter::class)) {
             return $class;
         }
 
@@ -91,8 +91,8 @@ final class ListCommand extends Command
             }
         }
 
-        $guess = $this->laravel->getNamespace().'ViewModels\\'.$class;
+        $guess = $this->laravel->getNamespace().'Presenters\\'.$class;
 
-        return is_subclass_of($guess, ViewModel::class) ? $guess : null;
+        return is_subclass_of($guess, Presenter::class) ? $guess : null;
     }
 }

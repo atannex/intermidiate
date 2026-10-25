@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Tests\Feature;
 
 use Atannex\Intermidiate\Intermidiate;
-use Atannex\Intermidiate\Tests\Fixtures\ViewModels\ArchiveViewModel;
+use Atannex\Intermidiate\Tests\Fixtures\Presenters\ArchivePresenter;
 use Atannex\Intermidiate\Tests\TestCase;
 use Illuminate\Filesystem\Filesystem;
 
@@ -13,7 +13,7 @@ final class CommandsTest extends TestCase
 {
     protected function tearDown(): void
     {
-        (new Filesystem)->deleteDirectory($this->app->path('ViewModels'));
+        (new Filesystem)->deleteDirectory($this->app->path('Presenters'));
 
         parent::tearDown();
     }
@@ -22,11 +22,11 @@ final class CommandsTest extends TestCase
     {
         $path = $this->app->make(Intermidiate::class)->cachePath();
 
-        $this->artisan('view-model:cache')->expectsOutputToContain('Cached 1 ViewModel binding.')->assertSuccessful();
+        $this->artisan('presenter:cache')->expectsOutputToContain('Cached 1 Presenter binding.')->assertSuccessful();
         $this->assertFileExists($path);
-        $this->assertSame([ArchiveViewModel::class => ['archive']], require $path);
+        $this->assertSame([ArchivePresenter::class => ['archive']], require $path);
 
-        $this->artisan('view-model:clear')->assertSuccessful();
+        $this->artisan('presenter:clear')->assertSuccessful();
         $this->assertFileDoesNotExist($path);
     }
 
@@ -40,34 +40,34 @@ final class CommandsTest extends TestCase
 
     public function test_list_shows_views_and_variables(): void
     {
-        $this->artisan('view-model:list')
-            ->expectsOutputToContain(ArchiveViewModel::class)
+        $this->artisan('presenter:list')
+            ->expectsOutputToContain(ArchivePresenter::class)
             ->expectsOutputToContain('$ledger')
             ->expectsOutputToContain('Atannex\Intermidiate\Slicing\Group')
             ->assertSuccessful();
 
-        $this->artisan('view-model:list', ['class' => 'ArchiveViewModel', '--json' => true])
+        $this->artisan('presenter:list', ['class' => 'ArchivePresenter', '--json' => true])
             ->expectsOutputToContain('"related": "Illuminate\\\\Support\\\\Collection (lazy)"')
             ->assertSuccessful();
 
-        $this->artisan('view-model:list', ['class' => 'Nope'])->assertFailed();
+        $this->artisan('presenter:list', ['class' => 'Nope'])->assertFailed();
     }
 
     public function test_make_view_model_and_presenter(): void
     {
-        $this->artisan('make:view-model', ['name' => 'ArchiveViewModel', '--view' => 'date'])->assertSuccessful();
+        $this->artisan('make:presenter', ['name' => 'ArchivePresenter', '--view' => 'date'])->assertSuccessful();
 
-        $file = $this->app->path('ViewModels/ArchiveViewModel.php');
+        $file = $this->app->path('Presenters/ArchivePresenter.php');
         $this->assertFileExists($file);
         $contents = (string) file_get_contents($file);
-        $this->assertStringContainsString('namespace App\ViewModels;', $contents);
-        $this->assertStringContainsString("#[ForView('date')]\nfinal class ArchiveViewModel extends ViewModel", $contents);
+        $this->assertStringContainsString('namespace App\Presenters;', $contents);
+        $this->assertStringContainsString("#[ForView('date')]\nfinal class ArchivePresenter extends Presenter", $contents);
         $this->assertStringContainsString('use Atannex\Intermidiate\Attributes\ForView;', $contents);
 
-        $this->artisan('make:view-model', ['name' => 'PlainViewModel'])->assertSuccessful();
-        $this->assertStringNotContainsString('ForView', (string) file_get_contents($this->app->path('ViewModels/PlainViewModel.php')));
+        $this->artisan('make:presenter', ['name' => 'PlainPresenter'])->assertSuccessful();
+        $this->assertStringNotContainsString('ForView', (string) file_get_contents($this->app->path('Presenters/PlainPresenter.php')));
 
-        $this->artisan('make:presenter', ['name' => 'StoryCard'])->assertSuccessful();
-        $this->assertStringContainsString('namespace App\ViewModels\Presenters;', (string) file_get_contents($this->app->path('ViewModels/Presenters/StoryCard.php')));
+        $this->artisan('make:model-presenter', ['name' => 'StoryCard'])->assertSuccessful();
+        $this->assertStringContainsString('namespace App\Presenters\Models;', (string) file_get_contents($this->app->path('Presenters/Models/StoryCard.php')));
     }
 }

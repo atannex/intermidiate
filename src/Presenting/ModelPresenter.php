@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Presenting;
 
 use ArrayAccess;
-use Atannex\Intermidiate\Exceptions\ViewModelException;
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Support\Member;
 use Atannex\Intermidiate\Support\Schema;
 use Illuminate\Contracts\Pagination\CursorPaginator;
@@ -18,7 +18,7 @@ use JsonSerializable;
  * Presentation logic for one model (or array): computed fields as methods,
  * everything else read straight from the wrapped value.
  *
- *     final class StoryCard extends Presenter
+ *     final class StoryCard extends ModelPresenter
  *     {
  *         public function kicker(): string { return Str::upper($this->subject->category?->name ?? 'News'); }
  *     }
@@ -33,7 +33,7 @@ use JsonSerializable;
  * @implements ArrayAccess<string, mixed>
  * @implements Arrayable<string, mixed>
  */
-abstract class Presenter implements Arrayable, ArrayAccess, JsonSerializable
+abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializable
 {
     /** @var array<string, mixed> */
     private array $computed = [];
@@ -96,7 +96,7 @@ abstract class Presenter implements Arrayable, ArrayAccess, JsonSerializable
     public function __call(string $method, array $arguments): mixed
     {
         if (! is_object($this->subject) || ! method_exists($this->subject, $method) && ! method_exists($this->subject, '__call')) {
-            throw new ViewModelException(static::class." has no method {$method}() and neither does its subject.");
+            throw new PresenterException(static::class." has no method {$method}() and neither does its subject.");
         }
 
         return $this->subject->{$method}(...$arguments);
@@ -114,12 +114,12 @@ abstract class Presenter implements Arrayable, ArrayAccess, JsonSerializable
 
     public function offsetSet(mixed $offset, mixed $value): void
     {
-        throw new ViewModelException(static::class.' is read-only.');
+        throw new PresenterException(static::class.' is read-only.');
     }
 
     public function offsetUnset(mixed $offset): void
     {
-        throw new ViewModelException(static::class.' is read-only.');
+        throw new PresenterException(static::class.' is read-only.');
     }
 
     /**

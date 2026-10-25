@@ -7,8 +7,8 @@ namespace Atannex\Intermidiate\Attributes;
 use Attribute;
 
 /**
- * Binds a ViewModel to one or more views (wildcards allowed). When such a view
- * renders, the ViewModel is built from the view's data and its members are
+ * Binds a Presenter to one or more views (wildcards allowed). When such a view
+ * renders, the Presenter is built from the view's data and its members are
  * added to it. Picked up by discovery (config intermidiate.discover).
  */
 #[Attribute(Attribute::TARGET_CLASS)]

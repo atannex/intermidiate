@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 namespace {{ namespace }};
 
-use Atannex\Intermidiate\Presenting\Presenter;
-
-/**
- * @extends Presenter<mixed>
- */
-final class {{ class }} extends Presenter
+use Atannex\Intermidiate\Presenter;
+{{ imports }}
+{{ attribute }}final class {{ class }} extends Presenter
 {
-    // Computed fields, read as properties in the view ($card->kicker):
+    public function __construct(
+        // The inputs, typed: public readonly LengthAwarePaginator $posts,
+    ) {}
+
+    // Every public method is a view variable, computed once:
     //
-    // public function kicker(): string
+    // public function lead(): ?Post
     // {
-    //     return Str::upper($this->subject->category?->name ?? 'News');
+    //     return $this->layout()->lead->first();
     // }
 }

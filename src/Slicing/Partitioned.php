@@ -6,8 +6,8 @@ namespace Atannex\Intermidiate\Slicing;
 
 use ArrayAccess;
 use ArrayIterator;
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Exceptions\UnknownMember;
-use Atannex\Intermidiate\Exceptions\ViewModelException;
 use Countable;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Contracts\Pagination\Paginator;
@@ -103,12 +103,12 @@ final class Partitioned implements Arrayable, ArrayAccess, Countable, IteratorAg
 
     public function offsetSet(mixed $offset, mixed $value): void
     {
-        throw new ViewModelException('A partition is read-only.');
+        throw new PresenterException('A partition is read-only.');
     }
 
     public function offsetUnset(mixed $offset): void
     {
-        throw new ViewModelException('A partition is read-only.');
+        throw new PresenterException('A partition is read-only.');
     }
 
     public function getIterator(): Traversable

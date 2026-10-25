@@ -8,18 +8,18 @@ use Atannex\Intermidiate\Intermidiate;
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
 
-#[AsCommand(name: 'view-model:clear', description: 'Remove the ViewModel discovery cache')]
+#[AsCommand(name: 'presenter:clear', description: 'Remove the Presenter discovery cache')]
 final class ClearCommand extends Command
 {
-    protected $signature = 'view-model:clear';
+    protected $signature = 'presenter:clear';
 
-    protected $description = 'Remove the ViewModel discovery cache';
+    protected $description = 'Remove the Presenter discovery cache';
 
     public function handle(Intermidiate $intermidiate): int
     {
         $intermidiate->clearCache();
 
-        $this->components->info('ViewModel discovery cache cleared.');
+        $this->components->info('Presenter discovery cache cleared.');
 
         return self::SUCCESS;
     }

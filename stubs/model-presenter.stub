@@ -1,0 +1,20 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Atannex\Intermidiate\Presenting\ModelPresenter;
+
+/**
+ * @extends ModelPresenter<mixed>
+ */
+final class {{ class }} extends ModelPresenter
+{
+    // Computed fields, read as properties in the view ($card->kicker):
+    //
+    // public function kicker(): string
+    // {
+    //     return Str::upper($this->subject->category?->name ?? 'News');
+    // }
+}

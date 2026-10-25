@@ -14,4 +14,4 @@
 @endforeach
 </nav>
 <p class="pages">{{ $pages->fraction() }}</p>
-<p class="vm">{{ $vm->period }}</p>
+<p class="presenter">{{ $presenter->period }}</p>

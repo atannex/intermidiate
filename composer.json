@@ -1,10 +1,10 @@
 {
     "name": "atannex/intermidiate",
-    "description": "Type-safe ViewModels for Laravel: move data shaping, collection slicing, calendars, numbering, pagination and active states out of Blade and into small PHP classes, so views only hold markup.",
+    "description": "Type-safe Presenters for Laravel: move data shaping, collection slicing, calendars, numbering, pagination and active states out of Blade and into small PHP classes, so views only hold markup.",
     "keywords": [
         "laravel",
-        "view-model",
-        "viewmodel",
+        "presenter",
+        "presenter",
         "presenter",
         "blade",
         "view-composer",

@@ -6,8 +6,8 @@ namespace Atannex\Intermidiate\Exceptions;
 
 use Atannex\Intermidiate\Support\Suggest;
 
-/** A view asked a ViewModel, presenter or partition for something it doesn't have. */
-final class UnknownMember extends ViewModelException
+/** A view asked a Presenter, model presenter or partition for something it doesn't have. */
+final class UnknownMember extends PresenterException
 {
     /**
      * @param  list<string>  $known

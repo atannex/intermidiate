@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\Tests\Unit;
 
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Exceptions\UnknownMember;
-use Atannex\Intermidiate\Exceptions\ViewModelException;
 use Atannex\Intermidiate\Slicing\Group;
 use Atannex\Intermidiate\Slicing\Partition;
 use Atannex\Intermidiate\Tests\Fixtures\Story;
@@ -135,7 +135,7 @@ final class PartitionTest extends TestCase
             $this->assertStringContainsString('Did you mean "lead"?', $e->getMessage());
         }
 
-        $this->expectException(ViewModelException::class);
+        $this->expectException(PresenterException::class);
         $this->expectExceptionMessage('already has a "lead" group');
         Partition::of([])->take('lead', 1)->take('lead', 2);
     }

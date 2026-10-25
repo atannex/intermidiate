@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Tests\Feature;
 
 use Atannex\Intermidiate\Tests\Fixtures\Desk;
-use Atannex\Intermidiate\Tests\Fixtures\ViewModels\ArchiveViewModel;
-use Atannex\Intermidiate\Tests\Fixtures\ViewModels\DeskViewModel;
+use Atannex\Intermidiate\Tests\Fixtures\Presenters\ArchivePresenter;
+use Atannex\Intermidiate\Tests\Fixtures\Presenters\DeskPresenter;
 use Atannex\Intermidiate\Tests\TestCase;
 use Illuminate\Support\Facades\Route;
 
@@ -14,13 +14,13 @@ final class ResponseTest extends TestCase
 {
     protected function defineRoutes($router): void
     {
-        Route::get('/archive/{year}', fn (string $year) => ArchiveViewModel::make(
+        Route::get('/archive/{year}', fn (string $year) => ArchivePresenter::make(
             posts: $this->stories(25, page: (int) request('page', 1)),
             year: $year,
             monthsWithPosts: ['01', '03'],
         ));
 
-        Route::get('/desks/{desk}', fn (string $desk) => DeskViewModel::from(['desk' => $desk, 'page' => request('page', 1)])->view('desk'));
+        Route::get('/desks/{desk}', fn (string $desk) => DeskPresenter::from(['desk' => $desk, 'page' => request('page', 1)])->view('desk'));
     }
 
     public function test_a_returned_view_model_renders_its_view(): void
@@ -35,8 +35,8 @@ final class ResponseTest extends TestCase
             ->assertSee('<a href="/archive/2026/01" class="">Jan</a>', false)
             ->assertSee('<a href="" class="is-empty">Feb</a>', false)
             ->assertSee('<p class="pages">02 / 03</p>', false)
-            ->assertSee('<p class="vm">2026</p>', false)
-            ->assertViewModel(ArchiveViewModel::class, fn (ArchiveViewModel $vm) => $vm->lead->id === 11);
+            ->assertSee('<p class="presenter">2026</p>', false)
+            ->assertPresenter(ArchivePresenter::class, fn (ArchivePresenter $presenter) => $presenter->lead->id === 11);
     }
 
     public function test_the_same_view_model_answers_json(): void
@@ -48,7 +48,7 @@ final class ResponseTest extends TestCase
             ->assertJsonPath('desk', 'sports')
             ->assertJsonMissingPath('heading')
             ->assertJsonMissingPath('viewOnly')
-            ->assertViewModel(DeskViewModel::class);
+            ->assertPresenter(DeskPresenter::class);
     }
 
     public function test_json_can_be_turned_off(): void

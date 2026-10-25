@@ -9,15 +9,15 @@ use Atannex\Intermidiate\Attributes\ForView;
 use Atannex\Intermidiate\Attributes\Hidden;
 use Atannex\Intermidiate\Attributes\Lazy;
 use Atannex\Intermidiate\Attributes\ViewOnly;
-use Atannex\Intermidiate\Exceptions\ViewModelException;
-use Atannex\Intermidiate\Presenting\Presenter;
-use Atannex\Intermidiate\ViewModel;
+use Atannex\Intermidiate\Exceptions\PresenterException;
+use Atannex\Intermidiate\Presenter;
+use Atannex\Intermidiate\Presenting\ModelPresenter;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionProperty;
 
 /**
- * What a ViewModel (or presenter) exports, read once per class by reflection:
+ * What a Presenter (or presenter) exports, read once per class by reflection:
  * public properties become values, public methods without parameters become
  * memoized values and public methods with parameters become closures.
  */
@@ -75,7 +75,7 @@ final class Schema
     private static function reflect(string $class): self
     {
         $reflection = new ReflectionClass($class);
-        $base = $reflection->isSubclassOf(Presenter::class) ? Presenter::class : ViewModel::class;
+        $base = $reflection->isSubclassOf(ModelPresenter::class) ? ModelPresenter::class : Presenter::class;
         $reserved = [];
 
         foreach ((new ReflectionClass($base))->getMethods() as $method) {
@@ -131,7 +131,7 @@ final class Schema
     private static function add(array &$members, string $class, Member $member): void
     {
         if (isset($members[$member->key])) {
-            throw new ViewModelException("{$class} exports \"{$member->key}\" twice ({$members[$member->key]->name} and {$member->name}). Rename one with #[Expose].");
+            throw new PresenterException("{$class} exports \"{$member->key}\" twice ({$members[$member->key]->name} and {$member->name}). Rename one with #[Expose].");
         }
 
         $members[$member->key] = $member;

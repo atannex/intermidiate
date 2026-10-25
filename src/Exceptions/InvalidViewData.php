@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Exceptions;
 
 /** A value couldn't be given to a constructor parameter of the declared type. */
-final class InvalidViewData extends ViewModelException
+final class InvalidViewData extends PresenterException
 {
     public static function for(string $class, string $parameter, string $type, mixed $value): self
     {

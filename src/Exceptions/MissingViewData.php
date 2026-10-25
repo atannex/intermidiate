@@ -7,7 +7,7 @@ namespace Atannex\Intermidiate\Exceptions;
 use Atannex\Intermidiate\Support\Suggest;
 
 /** A required constructor parameter had no value in the given data. */
-final class MissingViewData extends ViewModelException
+final class MissingViewData extends PresenterException
 {
     /**
      * @param  list<string>  $available

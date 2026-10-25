@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Atannex\Intermidiate\Tests\Fixtures\ViewModels;
+namespace Atannex\Intermidiate\Tests\Fixtures\Presenters;
 
 use Atannex\Intermidiate\Attributes\Expose;
 use Atannex\Intermidiate\Attributes\Hidden;
 use Atannex\Intermidiate\Attributes\ViewOnly;
+use Atannex\Intermidiate\Presenter;
 use Atannex\Intermidiate\Tests\Fixtures\Desk;
-use Atannex\Intermidiate\ViewModel;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
-final class DeskViewModel extends ViewModel
+final class DeskPresenter extends Presenter
 {
     public static int $prepared = 0;
 

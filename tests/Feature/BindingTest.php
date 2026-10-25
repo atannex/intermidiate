@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Tests\Feature;
 
 use Atannex\Intermidiate\Facades\Intermidiate;
-use Atannex\Intermidiate\Tests\Fixtures\ViewModels\ArchiveViewModel;
-use Atannex\Intermidiate\Tests\Fixtures\ViewModels\DeskViewModel;
+use Atannex\Intermidiate\Tests\Fixtures\Presenters\ArchivePresenter;
+use Atannex\Intermidiate\Tests\Fixtures\Presenters\DeskPresenter;
 use Atannex\Intermidiate\Tests\TestCase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
@@ -31,18 +31,18 @@ final class BindingTest extends TestCase
             ->assertOk()
             ->assertSee('<article class="lead">Story 1</article>', false)
             ->assertSee('<a href="/archive/2026/01" class="">Jan</a>', false)
-            ->assertViewModel(ArchiveViewModel::class, fn (ArchiveViewModel $vm) => $vm->year === 2026);
+            ->assertPresenter(ArchivePresenter::class, fn (ArchivePresenter $presenter) => $presenter->year === 2026);
     }
 
     public function test_discovery_finds_for_view_attributes_and_skips_abstract_classes(): void
     {
-        $this->assertSame([ArchiveViewModel::class => ['archive']], Intermidiate::discovered());
-        $this->assertArrayHasKey(ArchiveViewModel::class, Intermidiate::bindings());
+        $this->assertSame([ArchivePresenter::class => ['archive']], Intermidiate::discovered());
+        $this->assertArrayHasKey(ArchivePresenter::class, Intermidiate::bindings());
     }
 
     public function test_bindings_from_code_and_wildcards(): void
     {
-        Intermidiate::bind('des*', DeskViewModel::class);
+        Intermidiate::bind('des*', DeskPresenter::class);
 
         $html = View::make('desk', ['desk' => 'economy', 'page' => '5'])->render();
 
@@ -51,9 +51,9 @@ final class BindingTest extends TestCase
 
     public function test_a_view_that_already_has_the_view_model_is_left_alone(): void
     {
-        $vm = ArchiveViewModel::make(posts: $this->stories(3), year: 2027);
+        $presenter = ArchivePresenter::make(posts: $this->stories(3), year: 2027);
 
-        $html = View::make('archive', $vm->toArray())->render();
+        $html = View::make('archive', $presenter->toArray())->render();
 
         $this->assertStringContainsString('<h1>2027</h1>', $html);
     }
@@ -65,7 +65,7 @@ final class BindingTest extends TestCase
         Intermidiate::bind('x', \stdClass::class);
     }
 
-    public function test_the_viewmodel_directive_builds_one_inline(): void
+    public function test_the_presenter_directive_builds_one_inline(): void
     {
         $this->get('/author')->assertOk()->assertSee('<p>By Ngwa · 07</p>', false);
     }

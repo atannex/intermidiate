@@ -30,7 +30,7 @@ abstract class TestCase extends Orchestra
     protected function defineEnvironment($app): void
     {
         $app['config']->set('view.paths', [__DIR__.'/Fixtures/views']);
-        $app['config']->set('intermidiate.discover', ['Atannex\\Intermidiate\\Tests\\Fixtures\\ViewModels' => __DIR__.'/Fixtures/ViewModels']);
+        $app['config']->set('intermidiate.discover', ['Atannex\\Intermidiate\\Tests\\Fixtures\\Presenters' => __DIR__.'/Fixtures/Presenters']);
         $app['config']->set('intermidiate.cache', sys_get_temp_dir().'/intermidiate-tests-'.getmypid().'.php');
 
         foreach ($this->intermidiate as $key => $value) {

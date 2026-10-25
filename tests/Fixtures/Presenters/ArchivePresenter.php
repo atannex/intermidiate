@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Atannex\Intermidiate\Tests\Fixtures\ViewModels;
+namespace Atannex\Intermidiate\Tests\Fixtures\Presenters;
 
 use Atannex\Intermidiate\Attributes\ForView;
 use Atannex\Intermidiate\Attributes\Lazy;
 use Atannex\Intermidiate\Calendar\Calendar;
 use Atannex\Intermidiate\Calendar\Month;
 use Atannex\Intermidiate\Pagination\Pages;
+use Atannex\Intermidiate\Presenter;
 use Atannex\Intermidiate\Slicing\Group;
 use Atannex\Intermidiate\Slicing\Partitioned;
 use Atannex\Intermidiate\Tests\Fixtures\Story;
-use Atannex\Intermidiate\ViewModel;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
 #[ForView('archive')]
-final class ArchiveViewModel extends ViewModel
+final class ArchivePresenter extends Presenter
 {
     public static int $related = 0;
 

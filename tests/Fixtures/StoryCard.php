@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\Tests\Fixtures;
 
-use Atannex\Intermidiate\Presenting\Presenter;
+use Atannex\Intermidiate\Presenting\ModelPresenter;
 
 /**
- * @extends Presenter<Story>
+ * @extends ModelPresenter<Story>
  */
-final class StoryCard extends Presenter
+final class StoryCard extends ModelPresenter
 {
     public static int $kickers = 0;
 

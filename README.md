@@ -2,10 +2,10 @@
 
 [![Tests](https://github.com/atannex/intermidiate/actions/workflows/tests.yml/badge.svg)](https://github.com/atannex/intermidiate/actions/workflows/tests.yml)
 
-**ViewModels for Laravel.** Move data shaping out of Blade and into small, typed PHP classes. That covers splitting a page of stories into a lead, a secondary pair and a ledger, zero-padding calendar parameters, numbering folios across pages, windowing pagers and deciding which menu item is active. All of it is worked out before the view renders, so controllers stay short and views only hold markup.
+**Presenters for Laravel.** Move data shaping out of Blade and into small, typed PHP classes. That covers splitting a page of stories into a lead, a secondary pair and a ledger, zero-padding calendar parameters, numbering folios across pages, windowing pagers and deciding which menu item is active. All of it is worked out before the view renders, so controllers stay short and views only hold markup.
 
 ```php
-return ArchiveViewModel::make(posts: $posts, year: $year, month: $month);
+return ArchivePresenter::make(posts: $posts, year: $year, month: $month);
 ```
 
 ```blade
@@ -24,7 +24,7 @@ No `@php`, no `str_pad`, no `slice(3)`.
 
 - [Why](#why)
 - [Install](#install)
-- [Writing a ViewModel](#writing-a-viewmodel)
+- [Writing a Presenter](#writing-a-presenter)
 - [Three ways to use one](#three-ways-to-use-one)
 - [Typed inputs](#typed-inputs)
 - [Partitions: lead, secondary, ledger](#partitions-lead-secondary-ledger)
@@ -32,7 +32,7 @@ No `@php`, no `str_pad`, no `slice(3)`.
 - [Calendars](#calendars)
 - [Pagers](#pagers)
 - [Menus, tabs and active states](#menus-tabs-and-active-states)
-- [Presenters](#presenters)
+- [Model presenters](#model-presenters)
 - [Lazy members](#lazy-members)
 - [Commands](#commands)
 - [Testing](#testing)
@@ -62,15 +62,15 @@ This is a real `@php` block from the top of a news archive view:
 
 It works, but it has the usual problems:
 
-| Problem | What a ViewModel changes |
+| Problem | What a Presenter changes |
 | --- | --- |
-| Logic is untestable unless you render HTML and grep it | It's a plain class: `ArchiveViewModel::make(...)->lead` in a unit test |
+| Logic is untestable unless you render HTML and grep it | It's a plain class: `ArchivePresenter::make(...)->lead` in a unit test |
 | No types: a `"2026"` route parameter, a `null` month and an array of strings all just flow through | Constructor parameters are typed and checked. Strings are converted (`"03"` → `3`, `"sports"` → `Desk::Sports`), and a bad value fails with the parameter's name |
 | Off-by-one numbering on page 2 (`$ledgerStart = …`) | Partitions keep every item's number on the whole listing |
 | `str_pad` repeated in every view | Every calendar, folio and pager value comes already padded |
-| A typo like `$leger` renders nothing in silence | `$vm->leger` throws: *has no "leger". Did you mean "ledger"?* |
+| A typo like `$leger` renders nothing in silence | `$presenter->leger` throws: *has no "leger". Did you mean "ledger"?* |
 | The Blade formatter mangles PHP inside attributes and `@php` blocks | There's no PHP left to mangle |
-| The same slicing is copied between the archive, tag and author pages | One ViewModel, or one `Partition` call, shared by all of them |
+| The same slicing is copied between the archive, tag and author pages | One Presenter, or one `Partition` call, shared by all of them |
 
 ## Install
 
@@ -82,17 +82,17 @@ PHP 8.2+, Laravel 11 or 12. The service provider and the `Intermidiate` facade r
 
 ```bash
 php artisan vendor:publish --tag=intermidiate-config   # optional
-php artisan vendor:publish --tag=intermidiate-stubs    # optional, to customise make:view-model
+php artisan vendor:publish --tag=intermidiate-stubs    # optional, to customise make:presenter
 ```
 
-## Writing a ViewModel
+## Writing a Presenter
 
 ```bash
-php artisan make:view-model ArchiveViewModel --view=date
+php artisan make:presenter ArchivePresenter --view=date
 ```
 
 ```php
-namespace App\ViewModels;
+namespace App\Presenters;
 
 use App\Models\Post;
 use Atannex\Intermidiate\Attributes\ForView;
@@ -101,12 +101,12 @@ use Atannex\Intermidiate\Calendar\Month;
 use Atannex\Intermidiate\Pagination\Pages;
 use Atannex\Intermidiate\Slicing\Group;
 use Atannex\Intermidiate\Slicing\Partitioned;
-use Atannex\Intermidiate\ViewModel;
+use Atannex\Intermidiate\Presenter;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
 #[ForView('date')]
-final class ArchiveViewModel extends ViewModel
+final class ArchivePresenter extends Presenter
 {
     public function __construct(
         public readonly LengthAwarePaginator $posts,
@@ -174,7 +174,7 @@ final class ArchiveViewModel extends ViewModel
 | public property | `$posts`, `$year`, `$month` |
 | public method without parameters | its return value: `$lead`, `$ledger`, `$calendar`. It runs once, however often you read it |
 | public method with parameters | a closure: `{{ $heading('today') }}` |
-| the ViewModel itself | `$vm`, so `$vm->lead` and `@include('partial', $vm->only('lead', 'beside'))` work |
+| the Presenter itself | `$presenter`, so `$presenter->lead` and `@include('partial', $presenter->only('lead', 'beside'))` work |
 | protected / private members | nothing, so they're safe for helpers like `layout()` |
 
 Attributes refine the export:
@@ -197,38 +197,38 @@ The base class reserves the names of its own methods (`view`, `with`, `only`, `e
 ```php
 public function __invoke(int $year, ?int $month = null)
 {
-    return ArchiveViewModel::make(posts: $this->archive->page($year, $month), year: $year, month: $month);
+    return ArchivePresenter::make(posts: $this->archive->page($year, $month), year: $year, month: $month);
         // ->view('date') when there's no #[ForView], or to pick another view
         // ->with('extra', $value) for one-off variables
 }
 ```
 
-When the request expects JSON, the same ViewModel answers with its members as JSON: closures and `#[ViewOnly]` members are left out, and paginators, groups, calendars and menus serialize themselves. One class can serve the page and the API. Set `json` to `false` to turn this off.
+When the request expects JSON, the same Presenter answers with its members as JSON: closures and `#[ViewOnly]` members are left out, and paginators, groups, calendars and menus serialize themselves. One class can serve the page and the API. Set `json` to `false` to turn this off.
 
 **2. Bind it to a view and leave the controller alone.** With `#[ForView('date')]` (found by discovery) or the config:
 
 ```php
 // config/intermidiate.php
 'bindings' => [
-    'date' => App\ViewModels\ArchiveViewModel::class,
-    'desks.*' => App\ViewModels\DeskViewModel::class,
+    'date' => App\Presenters\ArchivePresenter::class,
+    'desks.*' => App\Presenters\DeskPresenter::class,
 ],
 ```
 
-The controller keeps passing raw data with `return view('date', compact('posts', 'year', 'month', 'monthsWithPosts'))`. Before the view renders, the ViewModel is built from that data (`months_with_posts` fills `$monthsWithPosts` too) and its members are added. If the controller already passed the ViewModel, the binding steps aside.
+The controller keeps passing raw data with `return view('date', compact('posts', 'year', 'month', 'monthsWithPosts'))`. Before the view renders, the Presenter is built from that data (`months_with_posts` fills `$monthsWithPosts` too) and its members are added. If the controller already passed the Presenter, the binding steps aside.
 
-Or bind it in code: `Intermidiate::bind('date', ArchiveViewModel::class)`.
+Or bind it in code: `Intermidiate::bind('date', ArchivePresenter::class)`.
 
 **3. Inline, for partials and anonymous components that have no controller:**
 
 ```blade
-@viewmodel(App\ViewModels\BylineViewModel::class)
-{{-- or with extra input: @viewmodel(App\ViewModels\BylineViewModel::class, ['compact' => true]) --}}
+@presenter(App\Presenters\BylinePresenter::class)
+{{-- or with extra input: @presenter(App\Presenters\BylinePresenter::class, ['compact' => true]) --}}
 
 <p>{{ $byline }} · {{ $count }}</p>
 ```
 
-The ViewModel is built from the variables in scope, and its members become variables.
+The Presenter is built from the variables in scope, and its members become variables.
 
 ## Typed inputs
 
@@ -249,9 +249,9 @@ Each constructor parameter is filled from the data, then from the container (for
 Mistakes fail early and say what went wrong:
 
 ```
-ArchiveViewModel expects $year to be int, got string "twenty".
-ArchiveViewModel needs $posts (LengthAwarePaginator), but the data has no "posts". Did you mean "post"? Available: $post, $year.
-DeskViewModel has no constructor parameter $paeg. Did you mean "page"? It takes: $desk, $page.
+ArchivePresenter expects $year to be int, got string "twenty".
+ArchivePresenter needs $posts (LengthAwarePaginator), but the data has no "posts". Did you mean "post"? Available: $post, $year.
+DeskPresenter has no constructor parameter $paeg. Did you mean "page"? It takes: $desk, $page.
 ```
 
 ## Partitions: lead, secondary, ledger
@@ -440,16 +440,16 @@ $tabs->is('popular'); $tabs->label(); $tabs->isDefault();
 
 Each tab's URL is the current URL with its value. The default tab drops the parameter for clean URLs, and `?page` is reset (pass `keepPage: true` to keep it).
 
-## Presenters
+## Model presenters
 
-Presentation logic for a single model:
+Presentation logic for a single model, used inside a Presenter:
 
 ```bash
-php artisan make:presenter StoryCard
+php artisan make:model-presenter StoryCard
 ```
 
 ```php
-final class StoryCard extends Presenter
+final class StoryCard extends ModelPresenter
 {
     public function kicker(): string
     {
@@ -488,21 +488,21 @@ public function related(): Collection
 }
 ```
 
-The view gets a proxy that resolves on first use: when you echo it, loop over it, count it or read a property or method through it. An object is always truthy, so test it with one of the value's methods (`@if ($related->isNotEmpty())`) or unwrap it (`$related->value()`). Reading `$vm->related` returns the value itself.
+The view gets a proxy that resolves on first use: when you echo it, loop over it, count it or read a property or method through it. An object is always truthy, so test it with one of the value's methods (`@if ($related->isNotEmpty())`) or unwrap it (`$related->value()`). Reading `$presenter->related` returns the value itself.
 
 ## Commands
 
 ```bash
-php artisan make:view-model ArchiveViewModel --view=date   # app/ViewModels, with #[ForView('date')]
-php artisan make:presenter StoryCard                       # app/ViewModels/Presenters
-php artisan view-model:list                                # every bound ViewModel, its views and variables with types
-php artisan view-model:list ArchiveViewModel --json
-php artisan view-model:cache                               # cache discovery (also run by `php artisan optimize`)
-php artisan view-model:clear
+php artisan make:presenter ArchivePresenter --view=date   # app/Presenters, with #[ForView('date')]
+php artisan make:model-presenter StoryCard                 # app/Presenters/Models
+php artisan presenter:list                                # every bound Presenter, its views and variables with types
+php artisan presenter:list ArchivePresenter --json
+php artisan presenter:cache                               # cache discovery (also run by `php artisan optimize`)
+php artisan presenter:clear
 ```
 
 ```
-App\ViewModels\ArchiveViewModel ........................................ date
+App\Presenters\ArchivePresenter ........................................ date
   $posts .......................... Illuminate\Pagination\LengthAwarePaginator
   $lead ............................................................ ?App\Models\Post
   $ledger ...................................... Atannex\Intermidiate\Slicing\Group
@@ -511,33 +511,33 @@ App\ViewModels\ArchiveViewModel ........................................ date
 
 ## Testing
 
-A ViewModel is a plain object, so test it without rendering:
+A Presenter is a plain object, so test it without rendering:
 
 ```php
-$vm = ArchiveViewModel::make(posts: $paginator, year: 2026, month: 3);
+$presenter = ArchivePresenter::make(posts: $paginator, year: 2026, month: 3);
 
-expect($vm->lead->id)->toBe(11);
-expect($vm->ledger->folio(0))->toBe('14');
-expect($vm->calendar[2]->current)->toBeTrue();
+expect($presenter->lead->id)->toBe(11);
+expect($presenter->ledger->folio(0))->toBe('14');
+expect($presenter->calendar[2]->current)->toBeTrue();
 ```
 
 To check a response:
 
 ```php
 $this->get('/archive/2026')
-    ->assertViewModel(ArchiveViewModel::class, fn (ArchiveViewModel $vm) => $vm->lead !== null);
+    ->assertPresenter(ArchivePresenter::class, fn (ArchivePresenter $presenter) => $presenter->lead !== null);
 ```
 
-This works whether the controller returned the ViewModel, a binding built it, or the response was JSON.
+This works whether the controller returned the Presenter, a binding built it, or the response was JSON.
 
 ## Configuration
 
 ```php
 return [
-    'bindings' => [],                                   // view => ViewModel class(es); wildcards allowed
-    'discover' => ['App\\ViewModels' => app_path('ViewModels')],  // scanned for #[ForView]
+    'bindings' => [],                                   // view => Presenter class(es); wildcards allowed
+    'discover' => ['App\\Presenters' => app_path('Presenters')],  // scanned for #[ForView]
     'cache' => base_path('bootstrap/cache/intermidiate.php'),
-    'variable' => 'vm',                                 // the ViewModel inside its view; null turns it off
+    'variable' => 'presenter',                          // the Presenter inside its view; null turns it off
     'coerce' => true,                                   // convert strings to the declared types
     'json' => true,                                     // answer JSON requests with the members
     'pad' => 2,                                         // default folio width
@@ -545,7 +545,7 @@ return [
 ];
 ```
 
-Bindings register the first time the view factory is resolved, so requests that render no view never scan for ViewModels.
+Bindings register the first time the view factory is resolved, so requests that render no view never scan for Presenters.
 
 ## License
 

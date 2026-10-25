@@ -6,7 +6,7 @@ namespace Atannex\Intermidiate\Support;
 
 use Atannex\Intermidiate\Exceptions\InvalidViewData;
 use Atannex\Intermidiate\Exceptions\MissingViewData;
-use Atannex\Intermidiate\Exceptions\ViewModelException;
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Support\Str;
@@ -151,7 +151,7 @@ final class Hydrator
 
         foreach (array_keys($data) as $key) {
             if (is_string($key) && ! in_array($key, $names, true) && ! $variadic) {
-                throw new ViewModelException(sprintf(
+                throw new PresenterException(sprintf(
                     '%s has no constructor parameter $%s.%s It takes: %s.',
                     $class, $key, Suggest::hint($key, $names), $names === [] ? 'nothing' : '$'.implode(', $', $names),
                 ));

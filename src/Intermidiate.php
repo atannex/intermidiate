@@ -4,23 +4,23 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate;
 
-use Atannex\Intermidiate\Exceptions\ViewModelException;
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\View\Discovery;
 use Closure;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 
 /**
- * Binds ViewModels to views. When a bound view renders, its ViewModel is
+ * Binds Presenters to views. When a bound view renders, its Presenter is
  * built from the view's own data and the members are added to it, so the
  * controller can keep passing raw data.
  */
 final class Intermidiate
 {
-    /** @var array<class-string<ViewModel>, list<string>> */
+    /** @var array<class-string<Presenter>, list<string>> */
     private array $bindings = [];
 
-    /** @var array<class-string<ViewModel>, ViewModel> the last one of each class built for a response */
+    /** @var array<class-string<Presenter>, Presenter> the last one of each class built for a response */
     private array $tracked = [];
 
     /**
@@ -35,49 +35,49 @@ final class Intermidiate
 
     /**
      * @param  string|list<string>  $views  view names, wildcards allowed
-     * @param  class-string<ViewModel>  $viewModel
+     * @param  class-string<Presenter>  $presenter
      */
-    public function bind(string|array $views, string $viewModel): self
+    public function bind(string|array $views, string $presenter): self
     {
-        if (! is_subclass_of($viewModel, ViewModel::class)) {
-            throw new ViewModelException("{$viewModel} can't be bound to a view: it doesn't extend ".ViewModel::class.'.');
+        if (! is_subclass_of($presenter, Presenter::class)) {
+            throw new PresenterException("{$presenter} can't be bound to a view: it doesn't extend ".Presenter::class.'.');
         }
 
-        $new = array_values(array_diff((array) $views, $this->bindings[$viewModel] ?? []));
+        $new = array_values(array_diff((array) $views, $this->bindings[$presenter] ?? []));
 
         if ($new === []) {
             return $this;
         }
 
-        $this->bindings[$viewModel] = [...($this->bindings[$viewModel] ?? []), ...$new];
-        ($this->views)()->composer($new, fn (View $view) => $this->compose($viewModel, $view));
+        $this->bindings[$presenter] = [...($this->bindings[$presenter] ?? []), ...$new];
+        ($this->views)()->composer($new, fn (View $view) => $this->compose($presenter, $view));
 
         return $this;
     }
 
     /**
-     * Builds the ViewModel from the view's data and adds its members. Skipped
+     * Builds the Presenter from the view's data and adds its members. Skipped
      * when the view already carries one (a controller returned it).
      *
-     * @param  class-string<ViewModel>  $viewModel
+     * @param  class-string<Presenter>  $presenter
      */
-    public function compose(string $viewModel, View $view): ?ViewModel
+    public function compose(string $presenter, View $view): ?Presenter
     {
         $data = $view->getData();
 
         foreach ($data as $value) {
-            if ($value instanceof $viewModel) {
+            if ($value instanceof $presenter) {
                 return null;
             }
         }
 
-        $instance = $viewModel::from($data);
+        $instance = $presenter::from($data);
         $view->with($instance->toArray());
 
         return $this->track($instance);
     }
 
-    /** @return array<class-string<ViewModel>, list<string>> */
+    /** @return array<class-string<Presenter>, list<string>> */
     public function bindings(): array
     {
         // Config and discovered bindings register when the view factory is first resolved.
@@ -87,10 +87,10 @@ final class Intermidiate
     }
 
     /**
-     * ViewModels with #[ForView] in the configured folders, from the cache
-     * file when `view-model:cache` has written one.
+     * Presenters with #[ForView] in the configured folders, from the cache
+     * file when `presenter:cache` has written one.
      *
-     * @return array<class-string<ViewModel>, list<string>>
+     * @return array<class-string<Presenter>, list<string>>
      */
     public function discovered(): array
     {
@@ -104,8 +104,8 @@ final class Intermidiate
     /** Binds everything discovery finds. */
     public function bindDiscovered(): self
     {
-        foreach ($this->discovered() as $viewModel => $views) {
-            $this->bind($views, $viewModel);
+        foreach ($this->discovered() as $presenter => $views) {
+            $this->bind($views, $presenter);
         }
 
         return $this;
@@ -114,14 +114,14 @@ final class Intermidiate
     /**
      * Writes the discovery cache.
      *
-     * @return array<class-string<ViewModel>, list<string>>
+     * @return array<class-string<Presenter>, list<string>>
      */
     public function cache(): array
     {
         $found = Discovery::within($this->discover);
 
         if ($this->cache === null) {
-            throw new ViewModelException('Set config intermidiate.cache to a file path to cache discovery.');
+            throw new PresenterException('Set config intermidiate.cache to a file path to cache discovery.');
         }
 
         if (! is_dir(dirname($this->cache))) {
@@ -144,29 +144,29 @@ final class Intermidiate
     }
 
     /**
-     * @template T of ViewModel
+     * @template T of Presenter
      *
-     * @param  T  $viewModel
+     * @param  T  $presenter
      * @return T
      *
      * @internal
      */
-    public function track(ViewModel $viewModel): ViewModel
+    public function track(Presenter $presenter): Presenter
     {
-        $this->tracked[$viewModel::class] = $viewModel;
+        $this->tracked[$presenter::class] = $presenter;
 
-        return $viewModel;
+        return $presenter;
     }
 
     /**
-     * The last ViewModel of this class built for a response (for tests).
+     * The last Presenter of this class built for a response (for tests).
      *
-     * @template T of ViewModel
+     * @template T of Presenter
      *
      * @param  class-string<T>  $class
      * @return T|null
      */
-    public function last(string $class): ?ViewModel
+    public function last(string $class): ?Presenter
     {
         foreach (array_reverse($this->tracked, true) as $tracked) {
             if ($tracked instanceof $class) {

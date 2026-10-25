@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Testing;
 
 use Atannex\Intermidiate\Intermidiate;
-use Atannex\Intermidiate\ViewModel;
+use Atannex\Intermidiate\Presenter;
 use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
@@ -13,19 +13,19 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Assert;
 
 /**
- * @internal Registers TestResponse::assertViewModel().
+ * @internal Registers TestResponse::assertPresenter().
  *
- *     $this->get('/archive/2026')->assertViewModel(ArchiveViewModel::class, fn ($vm) => $vm->lead !== null);
+ *     $this->get('/archive/2026')->assertPresenter(ArchivePresenter::class, fn ($presenter) => $presenter->lead !== null);
  */
 final class Assertions
 {
     public static function register(): void
     {
-        if (! class_exists(TestResponse::class) || TestResponse::hasMacro('assertViewModel')) {
+        if (! class_exists(TestResponse::class) || TestResponse::hasMacro('assertPresenter')) {
             return;
         }
 
-        TestResponse::macro('assertViewModel', function (string $class, ?Closure $callback = null) {
+        TestResponse::macro('assertPresenter', function (string $class, ?Closure $callback = null) {
             /** @var TestResponse $this */
             $found = Assertions::find($this, $class);
 
@@ -40,9 +40,9 @@ final class Assertions
     }
 
     /**
-     * @param  class-string<ViewModel>  $class
+     * @param  class-string<Presenter>  $class
      */
-    public static function find(TestResponse $response, string $class): ?ViewModel
+    public static function find(TestResponse $response, string $class): ?Presenter
     {
         $original = $response->baseResponse->original ?? null;
 

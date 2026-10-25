@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Atannex\Intermidiate\Tests\Fixtures\ViewModels;
+namespace Atannex\Intermidiate\Tests\Fixtures\Presenters;
 
+use Atannex\Intermidiate\Presenter;
 use Atannex\Intermidiate\Support\Numeral;
-use Atannex\Intermidiate\ViewModel;
 
-/** Used inline by @viewmodel in a partial. */
-final class BylineViewModel extends ViewModel
+/** Used inline by @presenter in a partial. */
+final class BylinePresenter extends Presenter
 {
     public function __construct(private readonly string $authorName, private readonly int $storyCount) {}
 

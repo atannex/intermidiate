@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\View;
 
+use Atannex\Intermidiate\Presenter;
 use Atannex\Intermidiate\Support\Schema;
-use Atannex\Intermidiate\ViewModel;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use SplFileInfo;
 
-/** Finds ViewModels carrying #[ForView] in PSR-4 folders. */
+/** Finds Presenters carrying #[ForView] in PSR-4 folders. */
 final class Discovery
 {
     /**
      * @param  array<string, string>  $namespaces  namespace => folder
-     * @return array<class-string<ViewModel>, list<string>> class => views
+     * @return array<class-string<Presenter>, list<string>> class => views
      */
     public static function within(array $namespaces): array
     {
@@ -39,7 +39,7 @@ final class Discovery
                 $relative = substr($file->getPathname(), strlen(rtrim($directory, '/\\')) + 1, -4);
                 $class = trim($namespace, '\\').'\\'.str_replace(['/', '\\'], '\\', $relative);
 
-                if (! class_exists($class) || ! is_subclass_of($class, ViewModel::class) || (new ReflectionClass($class))->isAbstract()) {
+                if (! class_exists($class) || ! is_subclass_of($class, Presenter::class) || (new ReflectionClass($class))->isAbstract()) {
                     continue;
                 }
 

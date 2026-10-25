@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\Support;
 
-/** One exported member of a ViewModel or presenter. */
+/** One exported member of a Presenter or presenter. */
 final class Member
 {
     public const PROPERTY = 'property';
@@ -22,7 +22,7 @@ final class Member
         public readonly bool $viewOnly = false,
     ) {}
 
-    /** How the view sees it, for view-model:list. */
+    /** How the view sees it, for presenter:list. */
     public function describe(): string
     {
         $type = $this->type ?? 'mixed';

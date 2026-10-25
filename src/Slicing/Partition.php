@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\Slicing;
 
-use Atannex\Intermidiate\Exceptions\ViewModelException;
+use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Support\Settings;
 use Closure;
 use Illuminate\Contracts\Pagination\CursorPaginator;
@@ -217,19 +217,19 @@ final class Partition
             }
         }
 
-        throw new ViewModelException('The partition fell back but has no rest() group to fall back to. Add one, or name it: ->atLeast(3, otherwise: \'ledger\').');
+        throw new PresenterException('The partition fell back but has no rest() group to fall back to. Add one, or name it: ->atLeast(3, otherwise: \'ledger\').');
     }
 
     private function guard(string $name): void
     {
         foreach ($this->steps as [$existing]) {
             if ($existing === $name) {
-                throw new ViewModelException("The partition already has a \"{$name}\" group.");
+                throw new PresenterException("The partition already has a \"{$name}\" group.");
             }
         }
 
         if ($name === 'remainder') {
-            throw new ViewModelException('"remainder" is reserved for items no group took; pick another name.');
+            throw new PresenterException('"remainder" is reserved for items no group took; pick another name.');
         }
     }
 

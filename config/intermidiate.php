@@ -7,12 +7,12 @@ return [
     | Bindings
     |--------------------------------------------------------------------------
     |
-    | Views that get a ViewModel built from their own data before they render,
+    | Views that get a Presenter built from their own data before they render,
     | with no change to the controller. Keys are view names (wildcards work),
-    | values a ViewModel class or a list of them.
+    | values a Presenter class or a list of them.
     |
-    |     'date' => App\ViewModels\ArchiveViewModel::class,
-    |     'desks.*' => App\ViewModels\DeskViewModel::class,
+    |     'date' => App\Presenters\ArchivePresenter::class,
+    |     'desks.*' => App\Presenters\DeskPresenter::class,
     |
     */
 
@@ -23,29 +23,29 @@ return [
     | Discovery
     |--------------------------------------------------------------------------
     |
-    | Namespaces (and the folders they live in) scanned for ViewModels that
-    | carry #[ForView(...)]. Run `php artisan view-model:cache` in production
+    | Namespaces (and the folders they live in) scanned for Presenters that
+    | carry #[ForView(...)]. Run `php artisan presenter:cache` in production
     | (or `php artisan optimize`) so the scan doesn't happen on every request.
     |
     */
 
     'discover' => [
-        'App\\ViewModels' => app_path('ViewModels'),
+        'App\\Presenters' => app_path('Presenters'),
     ],
 
     'cache' => base_path('bootstrap/cache/intermidiate.php'),
 
     /*
     |--------------------------------------------------------------------------
-    | The ViewModel inside the view
+    | The Presenter inside the view
     |--------------------------------------------------------------------------
     |
-    | Every exported member becomes a view variable. The ViewModel itself is
-    | also shared under this name ($vm->lead, $vm->only(...)). Null turns it off.
+    | Every exported member becomes a view variable. The Presenter itself is
+    | also shared under this name ($presenter->lead, $presenter->only(...)). Null turns it off.
     |
     */
 
-    'variable' => 'vm',
+    'variable' => 'presenter',
 
     /*
     |--------------------------------------------------------------------------
@@ -66,7 +66,7 @@ return [
     | JSON
     |--------------------------------------------------------------------------
     |
-    | A ViewModel returned from a controller answers requests that expect JSON
+    | A Presenter returned from a controller answers requests that expect JSON
     | with its exported data instead of the rendered view.
     |
     */

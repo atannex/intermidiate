@@ -7,4 +7,4 @@ namespace Atannex\Intermidiate\Exceptions;
 use LogicException;
 
 /** Base for every error the package throws. */
-class ViewModelException extends LogicException {}
+class PresenterException extends LogicException {}

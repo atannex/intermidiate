@@ -7,10 +7,10 @@ namespace Atannex\Intermidiate\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static \Atannex\Intermidiate\Intermidiate bind(string|array $views, string $viewModel)
+ * @method static \Atannex\Intermidiate\Intermidiate bind(string|array $views, string $presenter)
  * @method static array bindings()
  * @method static array discovered()
- * @method static \Atannex\Intermidiate\ViewModel|null last(string $class)
+ * @method static \Atannex\Intermidiate\Presenter|null last(string $class)
  *
  * @see \Atannex\Intermidiate\Intermidiate
  */
