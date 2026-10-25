@@ -77,7 +77,16 @@ final class Routed
             $name = $parameter->getName();
             $type = $parameter->getType();
 
-            if (! array_key_exists($name, $parameters) || ! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
+            if (! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
+                continue;
+            }
+
+            // A model this route doesn't carry gets its default, not an empty model from the container.
+            if (! array_key_exists($name, $parameters)) {
+                if (is_a($type->getName(), UrlRoutable::class, true) && $parameter->isDefaultValueAvailable()) {
+                    $parameters[$name] = $parameter->getDefaultValue();
+                }
+
                 continue;
             }
 

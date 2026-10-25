@@ -23,6 +23,7 @@ final class RoutingTest extends TestCase
         // The Presenter is the route's action itself, the way an attribute router registers it.
         Route::get('/desk/{desk}', DeskPagePresenter::class);
         Route::get('/staff/{reporter}', StaffPagePresenter::class);
+        Route::get('/staff', StaffPagePresenter::class);
 
         // A bound view takes what the controller didn't pass from the route.
         Route::get('/raw/{year}', fn () => view('archive', ['posts' => $this->stories(3)]));
@@ -80,6 +81,7 @@ final class RoutingTest extends TestCase
     {
         $this->get('/staff/2')->assertOk()->assertSee('<h1>Kola Ndi</h1>', false);
         $this->get('/staff/9')->assertNotFound();
+        $this->get('/staff')->assertOk()->assertSee('<h1>Nobody</h1>', false);
     }
 
     public function test_a_bound_view_reads_inputs_the_controller_left_out_from_the_route(): void
@@ -123,9 +125,9 @@ final class StaffPagePresenter extends Presenter
     public function __construct(public readonly string $name) {}
 
     /** @return array<string, mixed> */
-    public static function source(Reporter $reporter): array
+    public static function source(?Reporter $reporter = null): array
     {
-        return ['name' => $reporter->name];
+        return ['name' => $reporter === null ? 'Nobody' : $reporter->name];
     }
 
     public function template(): ?string
