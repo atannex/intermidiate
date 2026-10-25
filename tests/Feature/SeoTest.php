@@ -46,6 +46,35 @@ final class SeoTest extends TestCase
         $this->assertStringNotContainsString('</script><', str_replace('</script>'."\n", '', $html));
     }
 
+    public function test_twitter_tags_and_any_meta_name(): void
+    {
+        config(['intermidiate.seo.twitter' => '@atannex']);
+
+        $html = Meta::make()->title('Rain')->description('Wet.')->image('https://cdn.test/a.jpg')
+            ->twitter(creator: '@mangum', site: '@desk')
+            ->name('theme-color', '#111')
+            ->toHtml();
+
+        $this->assertStringContainsString('<meta name="twitter:title" content="Rain">', $html);
+        $this->assertStringContainsString('<meta name="twitter:description" content="Wet.">', $html);
+        $this->assertStringContainsString('<meta name="twitter:image" content="https://cdn.test/a.jpg">', $html);
+        $this->assertStringContainsString('<meta name="twitter:creator" content="@mangum">', $html);
+        $this->assertStringContainsString('<meta name="twitter:site" content="@desk">', $html, 'set on the Meta, over config');
+        $this->assertSame(1, substr_count($html, 'twitter:site'));
+        $this->assertStringContainsString('<meta name="theme-color" content="#111">', $html);
+    }
+
+    public function test_og_locale_can_be_fixed_or_left_out(): void
+    {
+        app()->setLocale('fr-CM');
+        $this->assertStringContainsString('<meta property="og:locale" content="fr_CM">', Meta::make()->toHtml());
+        $this->assertStringNotContainsString('og:locale', Meta::make()->locale(null)->toHtml());
+
+        config(['intermidiate.seo.locale' => false]);
+        $this->assertStringNotContainsString('og:locale', Meta::make()->toHtml());
+        $this->assertStringContainsString('content="en_GB"', Meta::make()->locale('en-GB')->toHtml(), 'set on the Meta, over config');
+    }
+
     public function test_json_ld_is_safe_inside_a_script_tag(): void
     {
         $html = JsonLd::make('Thing', ['name' => '</script><script>alert(1)</script>'])->toHtml();

@@ -709,6 +709,8 @@ public function meta(): Meta
 }
 ```
 
+Twitter tags (`twitter:card`, `title`, `description`, `image`, `site`) come with the rest. `->twitter(creator: '@author')` adds the author's handle, `->name('theme-color', '#111')` adds any other `<meta name>`, and `->property('fb:app_id', '…')` adds any `<meta property>`. `og:locale` follows the app locale; `->locale(null)`, or config `seo.locale => false`, leaves it out when another package prints it.
+
 The canonical URL defaults to the page without its query string, keeping `?page=` from page 2 on. `->noindex()` hides filtered or search pages. `->schema(JsonLd::make('Event', [...]))` adds any other structured data. `JsonLd::article()`, `breadcrumbs()`, `organization()` and `website()` cover the usual ones, encoded so they're safe in a `<script>` tag. Config `seo` holds the site name, separator, length limits and Twitter handle.
 
 ## Commands

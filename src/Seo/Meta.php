@@ -56,6 +56,12 @@ final class Meta implements Htmlable, Stringable
     /** @var array<string, string> */
     private array $properties = [];
 
+    /** @var array<string, string> <meta name> tags */
+    private array $names = [];
+
+    /** false: not set, so config seo.locale (or the app locale) decides */
+    private string|false|null $locale = false;
+
     /** @var list<JsonLd> */
     private array $schemas = [];
 
@@ -176,6 +182,30 @@ final class Meta implements Htmlable, Stringable
     }
 
     /** Any other <meta property> (og:*, article:*, fb:*…). */
+    /** Any other <meta name> (twitter:*, author, theme-color…). */
+    public function name(string $name, ?string $content): self
+    {
+        if ($content !== null && $content !== '') {
+            $this->names[$name] = $content;
+        }
+
+        return $this;
+    }
+
+    /** twitter:creator (the author's handle) and twitter:site (over config seo.twitter). */
+    public function twitter(?string $creator = null, ?string $site = null): self
+    {
+        return $this->name('twitter:creator', $creator)->name('twitter:site', $site);
+    }
+
+    /** og:locale, "fr_CM"; null leaves it out (when another package prints it). */
+    public function locale(?string $locale): self
+    {
+        $this->locale = $locale;
+
+        return $this;
+    }
+
     public function property(string $property, ?string $content): self
     {
         if ($content !== null && $content !== '') {
@@ -263,14 +293,22 @@ final class Meta implements Htmlable, Stringable
             'og:description' => $this->description,
             'og:url' => $url,
             'og:image' => $this->image,
-            'og:locale' => str_replace('-', '_', Settings::locale()),
+            'og:locale' => $this->ogLocale(),
             ...$this->properties,
         ] as $property => $content) {
             $tags[] = self::tag('property', $property, $content);
         }
 
-        $tags[] = self::tag('name', 'twitter:card', $this->image === null ? 'summary' : 'summary_large_image');
-        $tags[] = self::tag('name', 'twitter:site', Settings::get('seo.twitter'));
+        foreach ([
+            'twitter:card' => $this->image === null ? 'summary' : 'summary_large_image',
+            'twitter:site' => Settings::get('seo.twitter'),
+            'twitter:title' => $this->title ?? $site,
+            'twitter:description' => $this->description,
+            'twitter:image' => $this->image,
+            ...$this->names,
+        ] as $name => $content) {
+            $tags[] = self::tag('name', $name, $content);
+        }
 
         foreach ($this->schemas() as $schema) {
             $tags[] = $schema->toHtml();
@@ -282,6 +320,19 @@ final class Meta implements Htmlable, Stringable
     public function __toString(): string
     {
         return $this->toHtml();
+    }
+
+    private function ogLocale(): ?string
+    {
+        // Set on this Meta wins (null leaves it out); then config seo.locale:
+        // null for the app locale, false to leave it out, or a fixed one.
+        if ($this->locale !== false) {
+            return $this->locale === null ? null : str_replace('-', '_', $this->locale);
+        }
+
+        $locale = Settings::get('seo.locale');
+
+        return $locale === false ? null : str_replace('-', '_', is_string($locale) ? $locale : Settings::locale());
     }
 
     /** @return list<JsonLd> */

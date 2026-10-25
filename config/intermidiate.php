@@ -156,6 +156,7 @@ return [
         'title_limit' => 95,
         'description_limit' => 160,
         'twitter' => null,                  // '@handle'
+        'locale' => null,                   // og:locale: null the app locale, false to leave it out
     ],
 
     /*
