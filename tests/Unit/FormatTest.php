@@ -26,6 +26,8 @@ final class FormatTest extends TestCase
         $this->assertSame('N', Format::initials('ngum'));
         $this->assertSame('ME', Format::initials('Ma Eba Tabe', edges: false));
         $this->assertSame('FL', Format::initials('FC 2000 Lions', lettersOnly: true));
+        $this->assertSame('EE', Format::initials('Essoh-Attah Eagles', edges: false, hyphens: false));
+        $this->assertSame('EA', Format::initials('Essoh-Attah Eagles', edges: false));
         $this->assertSame(1, Format::readingTime('short'));
         $this->assertSame(3, Format::readingTime(str_repeat('word ', 401)));
     }
@@ -57,6 +59,7 @@ final class FormatTest extends TestCase
         $this->assertSame('2 hours ago', Format::relative('2026-03-10 10:00:00'));
         $this->assertSame('1 Mar 2026', Format::relative('2026-03-01 10:00:00'));
         $this->assertSame('1 week ago', Format::relative('2026-03-01 10:00:00', days: null));
+        $this->assertSame('2h ago', Format::relative('2026-03-10 10:00:00', short: true));
 
         CarbonImmutable::setTestNow();
     }
@@ -67,6 +70,7 @@ final class FormatTest extends TestCase
         $this->assertSame('3 stories', Format::count(3, 'story'));
         $this->assertSame('1,204 stories', Format::count(1204, 'story'));
         $this->assertSame('12,500', Format::number(12500));
+        $this->assertSame('1204 stories', Format::count(1204, 'story', group: false));
 
         app('translator')->addLines(['*.:count story|:count stories' => ':count article|:count articles'], 'en');
         $this->assertSame('3 articles', Format::count(3, 'story'));

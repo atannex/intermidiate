@@ -705,13 +705,15 @@ Format::date($date, 'long');         // short "7 Mar", medium "7 Mar 2026", long
 Format::date($date, 'time', 'Africa/Douala');   // in another timezone (a newsroom clock, an edition's zone)
 Format::date($date, 'd.m.y', translate: false); // untranslated, like Carbon's format()
 Format::relative($date);             // "3 hours ago", then the date once it's a week old (relative($date, days: 1))
-Format::relative($date, days: null); // always relative: "2 months ago"
+Format::relative($date, days: null); // always relative: "2 months ago"; short: true gives "2mo ago"
 Format::iso($date);                  // "2026-03-07T08:00:00+01:00"; iso($date, 'UTC') in another timezone
 Format::count(1204, 'story');        // "1,204 stories", or your ":count story|:count stories" translation
+Format::count(1204, 'story', group: false); // "1204 stories"
 Format::number(12500);               // "12,500"
 Format::initials('Ma Ngum');         // "MN"; first and last word by default
 Format::initials('Ayuk Tabe Ndip', edges: false);    // "AT", the first words
 Format::initials('FC 2000 Lions', lettersOnly: true); // "FL"
+Format::initials('Essoh-Attah Eagles', edges: false, hyphens: false); // "EE", hyphenated names whole
 Format::readingTime($post->body);    // 4 (minutes)
 ```
 

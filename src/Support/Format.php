@@ -64,11 +64,12 @@ final class Format
     /**
      * "Ma Ngum" → "MN"; "ngum" → "N". The first and last words by default;
      * $edges false takes the first ones ("Ayuk Tabe Ndip" → "AT"), and
-     * $lettersOnly skips words that don't start with a letter ("FC 2000 Lions" → "FL").
+     * $lettersOnly skips words that don't start with a letter ("FC 2000 Lions" → "FL"), and
+     * $hyphens false keeps hyphenated and dotted names whole ("Essoh-Attah Eagles" → "EE").
      */
-    public static function initials(?string $name, int $letters = 2, bool $edges = true, bool $lettersOnly = false): string
+    public static function initials(?string $name, int $letters = 2, bool $edges = true, bool $lettersOnly = false, bool $hyphens = true): string
     {
-        $words = preg_split('/[\s\-_.]+/u', trim((string) $name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $words = preg_split($hyphens ? '/[\s\-_.]+/u' : '/[\s_]+/u', trim((string) $name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
         if ($lettersOnly) {
             $words = array_values(array_filter($words, fn (string $word) => preg_match('/^\p{L}/u', $word) === 1));
@@ -115,9 +116,9 @@ final class Format
 
     /**
      * "3 hours ago" for recent dates, the formatted date after $days. With
-     * $days null it's always relative ("2 months ago").
+     * $days null it's always relative ("2 months ago"); $short gives "3h ago".
      */
-    public static function relative(DateTimeInterface|string|int|null $date, ?int $days = 7, string $format = 'medium', ?string $timezone = null): ?string
+    public static function relative(DateTimeInterface|string|int|null $date, ?int $days = 7, string $format = 'medium', ?string $timezone = null, bool $short = false): ?string
     {
         $date = self::carbon($date, $timezone);
 
@@ -126,7 +127,7 @@ final class Format
         }
 
         if ($days === null || abs($date->diffInDays(CarbonImmutable::now(), true)) < $days) {
-            return $date->diffForHumans();
+            return $date->diffForHumans(short: $short);
         }
 
         return $date->translatedFormat(self::pattern($format));
@@ -140,13 +141,14 @@ final class Format
 
     /**
      * "1 story", "1,204 stories". A translation for ":count stories" (or the
-     * pipe form ":count story|:count stories") is used when there is one;
-     * the count is grouped by thousands either way.
+     * pipe form ":count story|:count stories") is used when there is one.
+     * The count is grouped by thousands unless $group is false ("1204 stories").
      */
-    public static function count(int|float $count, string $noun): string
+    public static function count(int|float $count, string $noun, bool $group = true): string
     {
         $plural = Str::plural($noun, (int) $count);
-        $shown = self::number($count, is_float($count) && floor($count) !== $count ? 1 : 0);
+        $decimals = is_float($count) && floor($count) !== $count ? 1 : 0;
+        $shown = $group ? self::number($count, $decimals) : (string) ($decimals ? round($count, 1) : (int) $count);
         $key = ':count '.$plural;
         $container = Container::getInstance();
 
