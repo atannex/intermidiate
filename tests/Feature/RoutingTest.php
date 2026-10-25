@@ -20,6 +20,10 @@ final class RoutingTest extends TestCase
         Route::presenter('/beat/{desk}/{reporter:slug}', BeatPresenter::class)->name('beat');
         Route::presenter('/by-id/{reporter}/{desk?}', BeatPresenter::class);
 
+        // The Presenter is the route's action itself, the way an attribute router registers it.
+        Route::get('/desk/{desk}', DeskPagePresenter::class);
+        Route::get('/staff/{reporter}', StaffPagePresenter::class);
+
         // A bound view takes what the controller didn't pass from the route.
         Route::get('/raw/{year}', fn () => view('archive', ['posts' => $this->stories(3)]));
     }
@@ -61,11 +65,72 @@ final class RoutingTest extends TestCase
             ->assertJsonPath('desk', 'sports');
     }
 
+    public function test_a_presenter_can_be_the_route_action_with_its_data_from_source(): void
+    {
+        $this->get('/desk/sports')
+            ->assertOk()
+            ->assertSee('<h1>Sports desk</h1><p>4 stories · SPORTS</p>', false)
+            ->assertPresenter(DeskPagePresenter::class, fn (DeskPagePresenter $page) => $page->count === 4);
+
+        $this->get('/desk/weather')->assertNotFound();
+        $this->getJson('/desk/news')->assertOk()->assertJsonPath('count', 4)->assertJsonPath('heading', 'NEWS');
+    }
+
+    public function test_source_looks_up_models_from_the_route(): void
+    {
+        $this->get('/staff/2')->assertOk()->assertSee('<h1>Kola Ndi</h1>', false);
+        $this->get('/staff/9')->assertNotFound();
+    }
+
     public function test_a_bound_view_reads_inputs_the_controller_left_out_from_the_route(): void
     {
         $this->get('/raw/2026')
             ->assertOk()
             ->assertPresenter(ArchivePresenter::class, fn (ArchivePresenter $presenter) => $presenter->year === 2026);
+    }
+}
+
+/** Serves tests/Fixtures/views/desk-page.blade.php from its own route, loading through source(). */
+final class DeskPagePresenter extends Presenter
+{
+    public function __construct(
+        public readonly string $title,
+        public readonly int $count,
+        private readonly string $slug,
+    ) {}
+
+    /** @return array<string, mixed>|null */
+    public static function source(string $desk): ?array
+    {
+        return in_array($desk, ['news', 'sports'], true)
+            ? ['title' => ucfirst($desk).' desk', 'count' => 4, 'slug' => $desk, 'raw' => 'passed through']
+            : null;
+    }
+
+    public function heading(): string
+    {
+        return strtoupper($this->slug);
+    }
+
+    public function template(): ?string
+    {
+        return 'desk-page';
+    }
+}
+
+final class StaffPagePresenter extends Presenter
+{
+    public function __construct(public readonly string $name) {}
+
+    /** @return array<string, mixed> */
+    public static function source(Reporter $reporter): array
+    {
+        return ['name' => $reporter->name];
+    }
+
+    public function template(): ?string
+    {
+        return 'staff-page';
     }
 }
 

@@ -24,6 +24,8 @@ final class FormatTest extends TestCase
         $this->assertSame('MN', Format::initials('Ma Ngum'));
         $this->assertSame('MT', Format::initials('Ma Eba Tabe'));
         $this->assertSame('N', Format::initials('ngum'));
+        $this->assertSame('ME', Format::initials('Ma Eba Tabe', edges: false));
+        $this->assertSame('FL', Format::initials('FC 2000 Lions', lettersOnly: true));
         $this->assertSame(1, Format::readingTime('short'));
         $this->assertSame(3, Format::readingTime(str_repeat('word ', 401)));
     }
@@ -40,8 +42,12 @@ final class FormatTest extends TestCase
         $this->assertSame('2026-03-08T00:30:00+01:00', Format::iso($date));
         $this->assertNull(Format::date(null));
 
+        $this->assertSame('7 Mar 2026, 23:30', Format::date($date, 'datetime', 'UTC'));
+        $this->assertSame('2026-03-07T23:30:00+00:00', Format::iso($date, 'UTC'));
+
         app()->setLocale('fr');
         $this->assertSame('8 mars 2026', Format::date($date, 'long'));
+        $this->assertSame('8 March 2026', Format::date($date, 'long', translate: false));
     }
 
     public function test_relative_dates_turn_absolute_after_a_while(): void
@@ -50,6 +56,7 @@ final class FormatTest extends TestCase
 
         $this->assertSame('2 hours ago', Format::relative('2026-03-10 10:00:00'));
         $this->assertSame('1 Mar 2026', Format::relative('2026-03-01 10:00:00'));
+        $this->assertSame('1 week ago', Format::relative('2026-03-01 10:00:00', days: null));
 
         CarbonImmutable::setTestNow();
     }
@@ -58,6 +65,8 @@ final class FormatTest extends TestCase
     {
         $this->assertSame('1 story', Format::count(1, 'story'));
         $this->assertSame('3 stories', Format::count(3, 'story'));
+        $this->assertSame('1,204 stories', Format::count(1204, 'story'));
+        $this->assertSame('12,500', Format::number(12500));
 
         app('translator')->addLines(['*.:count story|:count stories' => ':count article|:count articles'], 'en');
         $this->assertSame('3 articles', Format::count(3, 'story'));

@@ -16,7 +16,8 @@ use Illuminate\Support\Str;
  *     Format::date($post->published_at);   // "7 Mar 2026", in the app's timezone and locale
  *     Format::date($date, 'long');         // named formats from config intermidiate.dates
  *     Format::relative($date);             // "3 hours ago", or the date once it's older than a week
- *     Format::count(3, 'story');           // "3 stories"
+ *     Format::date($date, 'time', 'Africa/Douala');   // in another timezone
+ *     Format::count(1204, 'story');        // "1,204 stories"
  *     Format::initials('Ma Ngum');         // "MN"
  *     Format::readingTime($post->body);    // 4 (minutes)
  */
@@ -60,12 +61,20 @@ final class Format
         return Str::squish($text);
     }
 
-    /** "Ma Ngum" → "MN"; "ngum" → "N". */
-    public static function initials(?string $name, int $letters = 2): string
+    /**
+     * "Ma Ngum" → "MN"; "ngum" → "N". The first and last words by default;
+     * $edges false takes the first ones ("Ayuk Tabe Ndip" → "AT"), and
+     * $lettersOnly skips words that don't start with a letter ("FC 2000 Lions" → "FL").
+     */
+    public static function initials(?string $name, int $letters = 2, bool $edges = true, bool $lettersOnly = false): string
     {
         $words = preg_split('/[\s\-_.]+/u', trim((string) $name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
-        if (count($words) > $letters) {
+        if ($lettersOnly) {
+            $words = array_values(array_filter($words, fn (string $word) => preg_match('/^\p{L}/u', $word) === 1));
+        }
+
+        if ($edges && count($words) > $letters) {
             $words = [$words[0], ...array_slice($words, -($letters - 1))];
         }
 
@@ -83,40 +92,61 @@ final class Format
     /**
      * A date in the app's timezone and locale. $format is a name from config
      * intermidiate.dates (short, medium, long, full, month, time, datetime)
-     * or a format string.
+     * or a format string. $timezone shows it somewhere else (a newsroom
+     * clock, an edition's zone); $translate false keeps month and day names
+     * untranslated, like Carbon's format().
      */
-    public static function date(DateTimeInterface|string|int|null $date, string $format = 'medium'): ?string
+    public static function date(DateTimeInterface|string|int|null $date, string $format = 'medium', ?string $timezone = null, bool $translate = true): ?string
     {
-        $date = self::carbon($date);
-
-        return $date?->translatedFormat(self::pattern($format));
-    }
-
-    /** ISO 8601, for <time datetime> and JSON-LD. */
-    public static function iso(DateTimeInterface|string|int|null $date): ?string
-    {
-        return self::carbon($date)?->toIso8601String();
-    }
-
-    /** "3 hours ago" for recent dates, the formatted date after $days. */
-    public static function relative(DateTimeInterface|string|int|null $date, int $days = 7, string $format = 'medium'): ?string
-    {
-        $date = self::carbon($date);
+        $date = self::carbon($date, $timezone);
 
         if ($date === null) {
             return null;
         }
 
-        return abs($date->diffInDays(CarbonImmutable::now(), true)) < $days ? $date->diffForHumans() : $date->translatedFormat(self::pattern($format));
+        return $translate ? $date->translatedFormat(self::pattern($format)) : $date->format(self::pattern($format));
+    }
+
+    /** ISO 8601, for <time datetime> and JSON-LD. */
+    public static function iso(DateTimeInterface|string|int|null $date, ?string $timezone = null): ?string
+    {
+        return self::carbon($date, $timezone)?->toIso8601String();
     }
 
     /**
-     * "1 story", "3 stories". A translation for ":count stories" (or the
-     * pipe form ":count story|:count stories") is used when there is one.
+     * "3 hours ago" for recent dates, the formatted date after $days. With
+     * $days null it's always relative ("2 months ago").
+     */
+    public static function relative(DateTimeInterface|string|int|null $date, ?int $days = 7, string $format = 'medium', ?string $timezone = null): ?string
+    {
+        $date = self::carbon($date, $timezone);
+
+        if ($date === null) {
+            return null;
+        }
+
+        if ($days === null || abs($date->diffInDays(CarbonImmutable::now(), true)) < $days) {
+            return $date->diffForHumans();
+        }
+
+        return $date->translatedFormat(self::pattern($format));
+    }
+
+    /** "1,234", or "1,234.5" with decimals. */
+    public static function number(int|float $number, int $decimals = 0): string
+    {
+        return number_format($number, $decimals);
+    }
+
+    /**
+     * "1 story", "1,204 stories". A translation for ":count stories" (or the
+     * pipe form ":count story|:count stories") is used when there is one;
+     * the count is grouped by thousands either way.
      */
     public static function count(int|float $count, string $noun): string
     {
         $plural = Str::plural($noun, (int) $count);
+        $shown = self::number($count, is_float($count) && floor($count) !== $count ? 1 : 0);
         $key = ':count '.$plural;
         $container = Container::getInstance();
 
@@ -125,15 +155,15 @@ final class Format
             $choice = ':count '.Str::singular($noun).'|:count '.Str::plural($noun);
 
             if ($translator->has($choice)) {
-                return $translator->choice($choice, $count, ['count' => $count]);
+                return $translator->choice($choice, $count, ['count' => $shown]);
             }
 
             if ($translator->has($key)) {
-                return $translator->get($key, ['count' => $count]);
+                return $translator->get($key, ['count' => $shown]);
             }
         }
 
-        return $count.' '.$plural;
+        return $shown.' '.$plural;
     }
 
     private static function pattern(string $format): string
@@ -143,7 +173,7 @@ final class Format
         return $formats[$format] ?? $format;
     }
 
-    private static function carbon(DateTimeInterface|string|int|null $date): ?CarbonImmutable
+    private static function carbon(DateTimeInterface|string|int|null $date, ?string $timezone = null): ?CarbonImmutable
     {
         if ($date === null || $date === '') {
             return null;
@@ -155,8 +185,10 @@ final class Format
             default => CarbonImmutable::parse($date),
         };
 
-        $container = Container::getInstance();
-        $timezone = $container->bound('config') ? $container->make('config')->get('app.timezone') : null;
+        if ($timezone === null) {
+            $container = Container::getInstance();
+            $timezone = $container->bound('config') ? $container->make('config')->get('app.timezone') : null;
+        }
 
         return $carbon->setTimezone($timezone ?: 'UTC')->locale(Settings::locale());
     }

@@ -12,6 +12,8 @@ use Atannex\Intermidiate\Console\MakePresenterCommand;
 use Atannex\Intermidiate\Console\TidyCommand;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Http\PresenterController;
+use Atannex\Intermidiate\Http\Routed;
+use Atannex\Intermidiate\Support\Hydrator;
 use Atannex\Intermidiate\Testing\Assertions;
 use Atannex\Intermidiate\View\Inline;
 use Illuminate\Contracts\Foundation\Application;
@@ -20,6 +22,7 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\Arr;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Compilers\BladeCompiler;
+use ReflectionClass;
 use RuntimeException;
 
 final class IntermidiateServiceProvider extends ServiceProvider
@@ -101,6 +104,17 @@ final class IntermidiateServiceProvider extends ServiceProvider
         });
 
         Assertions::register();
+
+        // A Presenter that is a route's action (Route::get('/about', AboutPresenter::class),
+        // or #[Get] on the class) isn't autowired: the router gets an empty instance
+        // and __invoke() builds the real one from source() and the route.
+        $this->app->beforeResolving(Presenter::class, function (string $abstract, array $parameters, Application $app): void {
+            if ($parameters === [] && ! $app->bound($abstract) && is_subclass_of($abstract, Presenter::class) && Routed::serves($abstract)) {
+                $app->bind($abstract, fn () => Routed::serves($abstract)
+                    ? (new ReflectionClass($abstract))->newInstanceWithoutConstructor()
+                    : Hydrator::build($abstract, [], loose: true));
+            }
+        });
 
         // Route::presenter('/archive/{year}/{month?}', ArchivePresenter::class): a page with no controller.
         if (class_exists(Router::class) && ! Router::hasMacro('presenter')) {

@@ -307,6 +307,27 @@ Inputs fill themselves from the request wherever a Presenter is built (bound vie
 
 The same model lookup applies to data you pass: `view('posts.show', ['post' => 12])` fills a bound Presenter's `Post $post` with post 12.
 
+### The Presenter as the route's action
+
+A Presenter is also an invokable controller, so any router that takes one can point at it: `Route::get('/about', AboutPresenter::class)`, or an attribute router's `#[Get('/about', name: 'about')]` on the Presenter class. It isn't autowired: each request builds it from the route as above.
+
+When the page's data comes from somewhere else (a page manager, a repository, a cache), give the Presenter a static `source()`. Its parameters come from the route (models by route key, a 404 when missing) and the container; returning `null` is a 404:
+
+```php
+#[Get('/archive/{year}', name: 'archive.year')]
+final class ArchivePresenter extends Presenter
+{
+    public function __construct(private readonly Collection $posts, public readonly int $year) {}
+
+    public static function source(ArchivePageManager $page, string $year): ?array
+    {
+        return $page->forYear($year);          // ['posts' => …, 'year' => …, 'seoTitle' => …]
+    }
+}
+```
+
+The returned keys build the Presenter, and every key reaches the view as it is, under the Presenter's own members. That's the controller's `return view('archive', $page->forYear($year))` in one place, without the controller.
+
 ## Loading models: #[Paginate] and #[Fetch]
 
 Most of what a listing controller does is one query. Declare it on the input instead:
@@ -681,10 +702,16 @@ Format::text($html);                 // the same, without the cut
 Format::date($post->published_at);   // "7 Mar 2026" in app.timezone and the app locale
 Format::date($date, 'long');         // short "7 Mar", medium "7 Mar 2026", long "7 March 2026", full "Saturday 7 March 2026",
                                      // month "Mar 2026", time, datetime, your own from config `dates`, or a format string
+Format::date($date, 'time', 'Africa/Douala');   // in another timezone (a newsroom clock, an edition's zone)
+Format::date($date, 'd.m.y', translate: false); // untranslated, like Carbon's format()
 Format::relative($date);             // "3 hours ago", then the date once it's a week old (relative($date, days: 1))
-Format::iso($date);                  // "2026-03-07T08:00:00+01:00"
-Format::count(3, 'story');           // "3 stories", or your ":count story|:count stories" translation
-Format::initials('Ma Ngum');         // "MN"
+Format::relative($date, days: null); // always relative: "2 months ago"
+Format::iso($date);                  // "2026-03-07T08:00:00+01:00"; iso($date, 'UTC') in another timezone
+Format::count(1204, 'story');        // "1,204 stories", or your ":count story|:count stories" translation
+Format::number(12500);               // "12,500"
+Format::initials('Ma Ngum');         // "MN"; first and last word by default
+Format::initials('Ayuk Tabe Ndip', edges: false);    // "AT", the first words
+Format::initials('FC 2000 Lions', lettersOnly: true); // "FL"
 Format::readingTime($post->body);    // 4 (minutes)
 ```
 

@@ -9,6 +9,7 @@ use ArrayIterator;
 use Atannex\Intermidiate\Attributes\Cached;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Exceptions\UnknownMember;
+use Atannex\Intermidiate\Http\Routed;
 use Atannex\Intermidiate\Presenting\ModelPresenter;
 use Atannex\Intermidiate\Presenting\Models;
 use Atannex\Intermidiate\Slicing\Partition;
@@ -205,6 +206,18 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
     public function render(): string
     {
         return $this->toView()->render();
+    }
+
+    /**
+     * A Presenter can be a route's action itself, as an invokable controller
+     * (#[Get('/about')] on the class with an attribute router, or
+     * Route::get('/about', AboutPresenter::class)). The router keeps one
+     * instance per route, so each request builds a fresh one here, from
+     * source() and the route.
+     */
+    public function __invoke(): static
+    {
+        return Routed::serves(static::class) ? Routed::build(static::class) : $this;
     }
 
     public function toResponse($request): Response|JsonResponse
