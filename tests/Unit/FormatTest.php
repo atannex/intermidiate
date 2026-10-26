@@ -72,6 +72,12 @@ final class FormatTest extends TestCase
         $this->assertSame('12,500', Format::number(12500));
         $this->assertSame('1204 stories', Format::count(1204, 'story', group: false));
 
+        app()->setLocale('fr');
+        $this->assertSame('0 story', Format::count(0, 'story'));
+        $this->assertSame('2 stories', Format::count(2, 'story'));
+        app()->setLocale('en');
+        $this->assertSame('0 stories', Format::count(0, 'story'));
+
         app('translator')->addLines(['*.:count story|:count stories' => ':count article|:count articles'], 'en');
         $this->assertSame('3 articles', Format::count(3, 'story'));
     }

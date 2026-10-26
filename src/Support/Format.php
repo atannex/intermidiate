@@ -156,13 +156,13 @@ final class Format
             $translator = $container->make('translator');
             $choice = ':count '.Str::singular($noun).'|:count '.Str::plural($noun);
 
-            if ($translator->has($choice)) {
-                return $translator->choice($choice, $count, ['count' => $shown]);
-            }
-
-            if ($translator->has($key)) {
+            if (! $translator->has($choice) && $translator->has($key)) {
                 return $translator->get($key, ['count' => $shown]);
             }
+
+            // Like trans_choice(): the locale's plural rules pick the form even when
+            // there's no translation ("0 photo" in French), so it's a drop-in for it.
+            return $translator->choice($choice, $count, ['count' => $shown]);
         }
 
         return $shown.' '.$plural;
