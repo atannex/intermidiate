@@ -32,6 +32,14 @@ final class Intermidiate
     /** @var array<class-string<Presenter>, Presenter> the last one of each class built for a response */
     private array $tracked = [];
 
+    /**
+     * What discovery found, kept for this instance: without a cache file a
+     * scan reads every Presenter class, and every bare @presenter view asks.
+     *
+     * @var array{attributes: array<class-string<Presenter>, list<string>>, conventions: array<class-string<Presenter>, list<string>>, models: array<class-string, class-string<ModelPresenter>>}|null
+     */
+    private ?array $discovery = null;
+
     /** @var WeakMap<View, array<class-string<Presenter>, true>> */
     private WeakMap $composed;
 
@@ -267,12 +275,15 @@ final class Intermidiate
         }
 
         file_put_contents($this->cache, '<?php return '.var_export($found, true).';'.PHP_EOL);
+        $this->discovery = null;
 
         return $this->discovered();
     }
 
     public function clearCache(): bool
     {
+        $this->discovery = null;
+
         return $this->cache !== null && is_file($this->cache) && unlink($this->cache);
     }
 
@@ -285,6 +296,14 @@ final class Intermidiate
      * @return array{attributes: array<class-string<Presenter>, list<string>>, conventions: array<class-string<Presenter>, list<string>>, models: array<class-string, class-string<ModelPresenter>>}
      */
     private function discovery(): array
+    {
+        return $this->discovery ??= $this->discover();
+    }
+
+    /**
+     * @return array{attributes: array<class-string<Presenter>, list<string>>, conventions: array<class-string<Presenter>, list<string>>, models: array<class-string, class-string<ModelPresenter>>}
+     */
+    private function discover(): array
     {
         if ($this->cache !== null && is_file($this->cache)) {
             $cached = (array) require $this->cache;

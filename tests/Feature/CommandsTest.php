@@ -51,10 +51,28 @@ final class CommandsTest extends TestCase
 
         $this->assertSame([], $this->app->make(Intermidiate::class)->discovered());
 
-        // A cache from before conventions holds only the attribute map.
+        // A cache from before conventions holds only the attribute map. What
+        // discovery found is kept per instance, so read it with a fresh one.
         file_put_contents($path, '<?php return '.var_export([ArchivePresenter::class => ['archive']], true).';');
+        $this->app->forgetInstance(Intermidiate::class);
 
         $this->assertSame([ArchivePresenter::class => ['archive']], $this->app->make(Intermidiate::class)->discovered());
+    }
+
+    public function test_discovery_scans_once_per_instance(): void
+    {
+        $intermidiate = $this->app->make(Intermidiate::class);
+        $found = $intermidiate->discovered();
+        $path = $intermidiate->cachePath();
+
+        // A cache written later is not read by an instance that has scanned…
+        file_put_contents($path, '<?php return [];');
+        $this->assertSame($found, $intermidiate->discovered());
+
+        // …until it is told the cache changed.
+        $intermidiate->clearCache();
+        $this->assertSame($found, $intermidiate->discovered());
+        $this->assertFileDoesNotExist($path);
     }
 
     public function test_list_shows_views_and_variables(): void

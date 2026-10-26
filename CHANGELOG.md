@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.1 (2026-10-26)
+
+- Discovery runs once per `Intermidiate` instance. Without a discovery cache, every bare `@presenter` view used to re-scan all Presenters (about 5 ms each), which slowed pages with many components; the result is now kept, and `cache()` / `clearCache()` reset it.
+
 ## v1.0.0 (2026-10-26)
 
 - `Presenter` base: typed constructor inputs; public properties and methods as view variables (memoized; methods with parameters as closures); `#[Hidden]`, `#[Expose]`, `#[ViewOnly]`, `#[Lazy]`, `#[ForView]`; `Responsable` with JSON for `expectsJson()` requests; `only()`, `except()`, `with()`, `prepare()`, `once()`.
