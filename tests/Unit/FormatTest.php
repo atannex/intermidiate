@@ -72,11 +72,15 @@ final class FormatTest extends TestCase
         $this->assertSame('12,500', Format::number(12500));
         $this->assertSame('1204 stories', Format::count(1204, 'story', group: false));
 
+        // A French line equal to the English one still means French plural rules, as with trans_choice().
+        app('translator')->addLines(['*.:count photo|:count photos' => ':count photo|:count photos'], 'fr');
         app()->setLocale('fr');
-        $this->assertSame('0 story', Format::count(0, 'story'));
-        $this->assertSame('2 stories', Format::count(2, 'story'));
+        $this->assertSame(trans_choice(':count photo|:count photos', 0), Format::count(0, 'photo'));
+        $this->assertSame('0 photo', Format::count(0, 'photo'));
+        $this->assertSame('2 photos', Format::count(2, 'photo'));
+        $this->assertSame(trans_choice(':count story|:count stories', 0), Format::count(0, 'story'));
         app()->setLocale('en');
-        $this->assertSame('0 stories', Format::count(0, 'story'));
+        $this->assertSame('0 photos', Format::count(0, 'photo'));
 
         app('translator')->addLines(['*.:count story|:count stories' => ':count article|:count articles'], 'en');
         $this->assertSame('3 articles', Format::count(3, 'story'));
