@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0 (unreleased)
+## v1.0.0 (2026-10-26)
 
 - `Presenter` base: typed constructor inputs; public properties and methods as view variables (memoized; methods with parameters as closures); `#[Hidden]`, `#[Expose]`, `#[ViewOnly]`, `#[Lazy]`, `#[ForView]`; `Responsable` with JSON for `expectsJson()` requests; `only()`, `except()`, `with()`, `prepare()`, `once()`.
 - Input hydration: named, positional or loose (snake/camel) data; container services; coercion of strings to int, float, bool, backed enums, dates and collections; errors that name the parameter and suggest close matches.
