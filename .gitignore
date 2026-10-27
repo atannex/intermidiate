@@ -2,3 +2,8 @@
 /composer.lock
 /.phpunit.cache/
 .phpunit.result.cache
+/docs
+/tests
+/phpunit.xml.dist
+/.github/workflows/tests.yml
+/CHANGELOG.md
