@@ -95,12 +95,12 @@ final class Menu implements Arrayable, Countable, IteratorAggregate, JsonSeriali
         array $meta = [],
         iterable $children = [],
     ): self {
-        $item = Item::make($key, $label, $url)
-            ->activeOn(...($activeOn === null ? [] : (is_array($activeOn) ? $activeOn : [$activeOn])))
-            ->icon($icon)
-            ->badge($badge)
-            ->meta($meta)
-            ->withChildren($children);
+        // Built at once: the fluent setters copy the item each time.
+        $item = new Item($key, $label, $url, $activeOn === null ? [] : array_values(is_array($activeOn) ? $activeOn : [$activeOn]), $icon, $badge, $meta);
+
+        if ($children !== []) {
+            $item = $item->withChildren($children);
+        }
 
         return $this->push($item);
     }
@@ -283,8 +283,12 @@ final class Menu implements Arrayable, Countable, IteratorAggregate, JsonSeriali
     private function apply(array $items, array $chosen): array
     {
         return array_map(function (Item $item) use ($chosen) {
-            $children = $this->apply($item->children()->all(), $chosen);
-            $trail = (new Collection($children))->contains(fn (Item $child) => $child->open());
+            $children = $item->hasChildren() ? $this->apply($item->children()->all(), $chosen) : [];
+            $trail = false;
+
+            foreach ($children as $child) {
+                $trail = $trail || $child->open();
+            }
 
             return $item->withState(isset($chosen[$item->key]), $trail, $children);
         }, $items);
@@ -297,7 +301,10 @@ final class Menu implements Arrayable, Countable, IteratorAggregate, JsonSeriali
     {
         foreach ($items as $item) {
             $callback($item);
-            $this->walk($item->children()->all(), $callback);
+
+            if ($item->hasChildren()) {
+                $this->walk($item->children()->all(), $callback);
+            }
         }
     }
 

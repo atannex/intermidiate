@@ -7,7 +7,6 @@ namespace Atannex\Intermidiate\Support;
 use Atannex\Intermidiate\Attributes\Config;
 use Atannex\Intermidiate\Attributes\CurrentUser;
 use Atannex\Intermidiate\Attributes\Old;
-use Atannex\Intermidiate\Attributes\Session;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -31,98 +30,98 @@ final class Ambient
      *
      * @return array{bool, mixed}
      */
-    public static function marked(ReflectionParameter $parameter): array
+    public static function marked(Parameter $parameter): array
     {
-        $container = Container::getInstance();
+        $attribute = $parameter->marker;
 
-        if ($attribute = self::attribute($parameter, Config::class)) {
+        if ($attribute === null) {
+            return [false, null];
+        }
+
+        if ($attribute instanceof Config) {
+            $container = Container::getInstance();
             $config = $container->bound('config') ? $container->make('config') : null;
 
             return $config !== null && $config->has($attribute->key) ? [true, $config->get($attribute->key)] : [false, null];
         }
 
-        if ($attribute = self::attribute($parameter, Old::class)) {
-            $request = self::request();
-            $value = $request?->hasSession() ? self::first($parameter, $attribute->key, fn (string $key) => $request->old($key)) : null;
-
-            return $value === null ? [false, null] : [true, $value];
-        }
-
-        if ($attribute = self::attribute($parameter, Session::class)) {
-            $request = self::request();
-            $value = $request?->hasSession() ? self::first($parameter, $attribute->key, fn (string $key) => $request->session()->get($key)) : null;
-
-            return $value === null ? [false, null] : [true, $value];
-        }
-
-        if ($attribute = self::attribute($parameter, CurrentUser::class)) {
+        if ($attribute instanceof CurrentUser) {
             return [true, self::user($parameter, $attribute->guard)];
         }
 
-        return [false, null];
+        $request = self::request();
+
+        if (! $request?->hasSession()) {
+            return [false, null];
+        }
+
+        $value = $attribute instanceof Old
+            ? self::first($parameter, $attribute->key, fn (string $key) => $request->old($key))
+            : self::first($parameter, $attribute->key, fn (string $key) => $request->session()->get($key));
+
+        return $value === null ? [false, null] : [true, $value];
     }
 
     /**
-     * Unmarked parameters known by name: a user-typed $user (or $viewer…),
-     * string $locale and string $timezone. Only when the parameter has no
-     * default: `?User $user = null` or `?string $timezone = null` keeps its
-     * own meaning (an author, a fallback of its own).
+     * What an unmarked parameter is known as by its name: a user-typed $user
+     * (or $viewer…), string $locale and string $timezone. Only when the
+     * parameter has no default: `?User $user = null` or `?string $timezone = null`
+     * keeps its own meaning (an author, a fallback of its own).
      *
-     * @return array{bool, mixed}
+     * @return 'user'|'locale'|'timezone'|null
      */
-    public static function known(ReflectionParameter $parameter): array
+    public static function kind(ReflectionParameter $parameter): ?string
     {
         $type = $parameter->getType();
         $name = $parameter->getName();
 
         if (! $type instanceof ReflectionNamedType || $parameter->isDefaultValueAvailable()) {
-            return [false, null];
+            return null;
         }
 
         if (! $type->isBuiltin() && in_array($name, self::USER_NAMES, true) && is_a($type->getName(), Authenticatable::class, true)) {
-            return [true, self::user($parameter, null)];
+            return 'user';
         }
 
-        if ($type->getName() !== 'string') {
+        return $type->getName() === 'string' && in_array($name, ['locale', 'timezone'], true) ? $name : null;
+    }
+
+    /**
+     * The value of a parameter known by name (see kind()).
+     *
+     * @return array{bool, mixed}
+     */
+    public static function known(Parameter $parameter): array
+    {
+        if ($parameter->known === null) {
             return [false, null];
         }
 
         $container = Container::getInstance();
 
-        return match ($name) {
+        return match ($parameter->known) {
+            'user' => [true, self::user($parameter, null)],
             'locale' => [true, Settings::locale()],
-            'timezone' => [true, $container->bound('config') ? (string) $container->make('config')->get('app.timezone', 'UTC') : 'UTC'],
-            default => [false, null],
+            default => [true, $container->bound('config') ? (string) $container->make('config')->get('app.timezone', 'UTC') : 'UTC'],
         };
     }
 
-    private static function user(ReflectionParameter $parameter, ?string $guard): ?Authenticatable
+    private static function user(Parameter $parameter, ?string $guard): ?Authenticatable
     {
         $container = Container::getInstance();
         $user = $container->bound('auth') ? $container->make('auth')->guard($guard)->user() : null;
 
-        if ($user === null && ! $parameter->allowsNull()) {
+        if ($user === null && ! $parameter->nullable) {
             throw new AuthenticationException('Unauthenticated.', $guard === null ? [] : [$guard]);
         }
 
         return $user;
     }
 
-    /**
-     * @template T of object
-     *
-     * @param  class-string<T>  $class
-     * @return T|null
-     */
-    private static function attribute(ReflectionParameter $parameter, string $class): ?object
-    {
-        return ($parameter->getAttributes($class)[0] ?? null)?->newInstance();
-    }
-
     /** @param  callable(string): mixed  $read */
-    private static function first(ReflectionParameter $parameter, ?string $key, callable $read): mixed
+    private static function first(Parameter $parameter, ?string $key, callable $read): mixed
     {
-        $name = $parameter->getName();
+        $name = $parameter->name;
 
         foreach ($key !== null ? [$key] : array_unique([$name, Str::snake($name)]) as $candidate) {
             if (($value = $read($candidate)) !== null) {

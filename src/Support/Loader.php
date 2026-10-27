@@ -16,7 +16,6 @@ use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
-use ReflectionAttribute;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
@@ -26,13 +25,6 @@ use ReflectionParameter;
  */
 final class Loader
 {
-    public static function for(ReflectionParameter $parameter): ?Records
-    {
-        $attribute = $parameter->getAttributes(Records::class, ReflectionAttribute::IS_INSTANCEOF)[0] ?? null;
-
-        return $attribute?->newInstance();
-    }
-
     /**
      * @param  class-string  $class  the Presenter being built
      * @param  array<string, mixed>  $arguments  the other inputs, already resolved

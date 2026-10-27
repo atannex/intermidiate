@@ -104,7 +104,19 @@ final class YearCalendar implements Arrayable, Countable, IteratorAggregate, Jso
     /** @return Collection<int, Month> */
     public function months(): Collection
     {
-        return $this->months ??= (new Collection(range(1, 12)))->map(fn (int $number) => $this->month($number));
+        if ($this->months !== null) {
+            return $this->months;
+        }
+
+        $locale = $this->locale ?? Settings::locale();
+        $january = CarbonImmutable::create($this->year, 1, 1)->locale($locale);
+        $months = [];
+
+        foreach (range(1, 12) as $number) {
+            $months[] = $this->month($number, $january->setDate($this->year, $number, 1), $locale);
+        }
+
+        return $this->months = new Collection($months);
     }
 
     public function find(int|string $month): ?Month
@@ -161,11 +173,11 @@ final class YearCalendar implements Arrayable, Countable, IteratorAggregate, Jso
         return $this->toArray();
     }
 
-    private function month(int $number): Month
+    private function month(int $number, CarbonImmutable $start, string $locale): Month
     {
-        $start = CarbonImmutable::create($this->year, $number, 1)->locale($this->locale ?? Settings::locale());
-        $name = $this->names[$number] ?? $start->translatedFormat('F');
-        $short = isset($this->names[$number]) ? mb_substr($name, 0, 3) : $start->translatedFormat('M');
+        [$name, $short] = isset($this->names[$number])
+            ? [$this->names[$number], mb_substr($this->names[$number], 0, 3)]
+            : Names::month($number, $locale);
         $count = $this->counts[$number] ?? 0;
 
         $month = new Month(

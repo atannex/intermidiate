@@ -18,6 +18,9 @@ use Illuminate\Support\Str;
  */
 final class Active
 {
+    /** @var array{string, string, string|false|null}|null path, host, route name (false: no route), read on the first score */
+    private ?array $current = null;
+
     public function __construct(private readonly Request $request, private readonly bool $sections = false) {}
 
     public function score(Item $item): int
@@ -53,9 +56,11 @@ final class Active
             return Str::is($path === '' ? '/' : $path, $this->path()) ? 2000 + $literal : 0;
         }
 
-        $name = (string) preg_replace('/^route:/', '', $pattern);
+        $name = str_starts_with($pattern, 'route:') ? substr($pattern, 6) : $pattern;
+        $route = $this->current()[2];
 
-        return $this->request->route() !== null && $this->request->routeIs($name) ? 2000 + $literal : 0;
+        // As routeIs(), with the route's name read once for the whole menu.
+        return is_string($route) && Str::is($name, $route) ? 2000 + $literal : 0;
     }
 
     private function url(string $url): int
@@ -66,7 +71,7 @@ final class Active
             return 0;
         }
 
-        if (isset($parts['host']) && strcasecmp($parts['host'], $this->request->getHost()) !== 0) {
+        if (isset($parts['host']) && strcasecmp($parts['host'], $this->current()[1]) !== 0) {
             return 0;
         }
 
@@ -95,8 +100,24 @@ final class Active
 
     private function path(): string
     {
-        $path = trim($this->request->path(), '/');
+        return $this->current()[0];
+    }
 
-        return $path === '' ? '/' : $path;
+    /**
+     * The request's path, host and route name, the same for every item:
+     * getHost() validates the host and route() runs the resolver each call.
+     *
+     * @return array{string, string, string|false|null}
+     */
+    private function current(): array
+    {
+        if ($this->current === null) {
+            $path = trim($this->request->path(), '/');
+            $route = $this->request->route();
+
+            $this->current = [$path === '' ? '/' : $path, $this->request->getHost(), $route === null ? false : $route->getName()];
+        }
+
+        return $this->current;
     }
 }

@@ -64,6 +64,9 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
 
     private bool $prepared = false;
 
+    /** @var array{bool, Models|null}|null config intermidiate.present and the model finder, read on the first wrap */
+    private ?array $presenting = null;
+
     /**
      * Builds the Presenter by name (or position), checking every value
      * against its declared type. Services the constructor type-hints come
@@ -406,13 +409,18 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
     /** Wraps a member's models in their presenter, unless it's #[Raw] or presenting is off. */
     private function presentMember(Member $member, mixed $value): mixed
     {
-        if ($member->present === false || ($member->present === null && ! Settings::get('present', true))) {
+        // Nothing in these could be a model.
+        if ($member->present === false || $value === null || is_scalar($value) || is_array($value) || $value instanceof Closure) {
             return $value;
         }
 
-        $models = self::models();
+        [$enabled, $models] = $this->presenting ??= [(bool) Settings::get('present', true), self::models()];
 
-        return $models === null ? $value : $models->wrap($value, is_string($member->present) ? $member->present : null);
+        if ($models === null || ($member->present === null && ! $enabled)) {
+            return $value;
+        }
+
+        return $models->wrap($value, is_string($member->present) ? $member->present : null);
     }
 
     private function missingViewHint(): string
@@ -449,8 +457,9 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
             return $this->presented[$member->name][1];
         }
 
+        // Built fresh each time: kept on $this it would be a cycle that only the GC frees.
         if ($member->kind === Member::CALLABLE) {
-            return $this->resolved[$member->name] ??= Closure::fromCallable([$this, $member->name]);
+            return $this->{$member->name}(...);
         }
 
         if (! array_key_exists($member->name, $this->resolved)) {

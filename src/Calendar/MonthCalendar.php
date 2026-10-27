@@ -132,13 +132,13 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
     public function weekdays(): Collection
     {
         $first = $this->firstDay();
-        $monday = CarbonImmutable::create(2024, 1, 1)->locale($this->language());
+        $locale = $this->language();
 
-        return (new Collection(range(0, 6)))->map(function (int $offset) use ($first, $monday) {
+        return (new Collection(range(0, 6)))->map(function (int $offset) use ($first, $locale) {
             $number = ($first + $offset) % 7;
-            $date = $monday->addDays(($number + 6) % 7);
+            [$name, $short, $min] = Names::weekday($number, $locale);
 
-            return new Weekday($number, $date->translatedFormat('l'), $date->translatedFormat('D'), $date->isoFormat('dd'), $number === 0 || $number === 6);
+            return new Weekday($number, $name, $short, $min, $number === 0 || $number === 6);
         });
     }
 
@@ -146,7 +146,9 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
     public function weeks(): Collection
     {
         $first = $this->firstDay();
-        $cursor = $this->start->subDays(($this->start->dayOfWeek - $first + 7) % 7);
+        $locale = $this->language();
+        $today = $this->today();
+        $cursor = $this->start->subDays(($this->start->dayOfWeek - $first + 7) % 7)->locale($locale);
         $end = $this->start->endOfMonth();
         $weeks = [];
 
@@ -154,11 +156,12 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
             $days = [];
 
             for ($i = 0; $i < 7; $i++) {
-                $days[] = $this->day($cursor);
-                $cursor = $cursor->addDay();
+                $days[] = $this->day($cursor, $locale, $today);
+                // modify() and format('W') are native: Carbon's addDay() and isoWeek() cost many times more.
+                $cursor = $cursor->modify('+1 day');
             }
 
-            $weeks[] = new Week((int) $days[0]->date->isoWeek(), $days);
+            $weeks[] = new Week((int) $days[0]->date->format('W'), $days);
         }
 
         if (! $this->outside) {
@@ -174,7 +177,11 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
     /** Only this month's days, in order. @return Collection<int, Day> */
     public function days(): Collection
     {
-        return (new Collection(range(1, $this->start->daysInMonth)))->map(fn (int $day) => $this->day($this->start->setDay($day)));
+        $locale = $this->language();
+        $today = $this->today();
+        $start = $this->start->locale($locale);
+
+        return (new Collection(range(1, $this->start->daysInMonth)))->map(fn (int $day) => $this->day($start->setDay($day), $locale, $today));
     }
 
     public function previous(): self
@@ -211,11 +218,12 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
         return $this->toArray();
     }
 
-    private function day(CarbonImmutable $date): Day
+    /** @param  CarbonImmutable  $date  already in $locale */
+    private function day(CarbonImmutable $date, string $locale, string $today): Day
     {
-        $date = $date->locale($this->language());
-        $inMonth = $date->isSameMonth($this->start);
-        $number = (int) $date->format('j');
+        // One native format() for everything Carbon's getters would work out one by one.
+        [$year, $month, $number, $weekday] = array_map('intval', explode(' ', $date->format('Y n j w')));
+        $inMonth = $year === $this->year && $month === $this->month;
         $count = $inMonth ? ($this->counts[$number] ?? 0) : 0;
 
         $day = new Day(
@@ -224,12 +232,12 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
             Numeral::pad($number, 2),
             $inMonth,
             $inMonth && $number === $this->current,
-            $date->isToday(),
+            "{$year} {$month} {$number}" === $today,
             $date->isWeekend(),
             $inMonth && (! $this->tracksFilled || $count > 0),
             $count,
             null,
-            $date->translatedFormat('l'),
+            Names::weekday($weekday, $locale)[0],
         );
 
         if ($this->link === null || ! $inMonth) {
@@ -237,6 +245,12 @@ final class MonthCalendar implements Arrayable, IteratorAggregate, JsonSerializa
         }
 
         return new Day($day->date, $day->number, $day->param, $day->inMonth, $day->current, $day->today, $day->weekend, $day->filled, $day->count, ($this->link)($day), $day->weekday);
+    }
+
+    /** Today in the grid's timezone, as day() formats dates, the way Carbon's isToday() compares them. */
+    private function today(): string
+    {
+        return CarbonImmutable::now($this->start->getTimezone())->format('Y n j');
     }
 
     private function firstDay(): int

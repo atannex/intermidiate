@@ -29,6 +29,9 @@ final class Schema
     /** @var array<class-string, self> */
     private static array $cache = [];
 
+    /** @var array<string, Member>|null members by PHP name and snake_case, built on the first miss */
+    private ?array $aliases = null;
+
     /**
      * @param  array<string, Member>  $members  keyed by variable name
      * @param  list<string>  $views  from #[ForView]
@@ -53,7 +56,7 @@ final class Schema
 
     public function member(string $key): ?Member
     {
-        return $this->members[$key] ?? $this->byName()[$key] ?? null;
+        return $this->members[$key] ?? ($this->aliases ??= $this->byName())[$key] ?? null;
     }
 
     /** @return list<string> */

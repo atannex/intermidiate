@@ -9,18 +9,14 @@ use Atannex\Intermidiate\Exceptions\MissingViewData;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Presenting\ModelPresenter;
 use Illuminate\Container\Container;
-use Atannex\Intermidiate\Attributes\Query;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Contracts\Routing\UrlRoutable;
-use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
-use Illuminate\Support\Str;
 use LogicException;
 use ReflectionClass;
 use ReflectionNamedType;
-use ReflectionParameter;
 use ReflectionType;
 use ReflectionUnionType;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -42,6 +38,14 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class Hydrator
 {
     /**
+     * Constructor parameters per class, read once: reflecting a constructor
+     * and its attributes costs more than building the object.
+     *
+     * @var array<class-string, list<Parameter>|null> null: no constructor
+     */
+    private static array $blueprints = [];
+
+    /**
      * @template T of object
      *
      * @param  class-string<T>  $class
@@ -52,30 +56,27 @@ final class Hydrator
      */
     public static function build(string $class, array $data, bool $loose = false, bool $page = false): object
     {
-        $reflection = new ReflectionClass($class);
-        $constructor = $reflection->getConstructor();
+        $parameters = self::$blueprints[$class] ??= self::blueprint($class);
 
-        if ($constructor === null) {
-            return $reflection->newInstance();
+        if ($parameters === null) {
+            return new $class;
         }
-
-        $parameters = $constructor->getParameters();
 
         if (! $loose) {
             self::rejectUnknown($class, $parameters, $data);
         }
 
-        $coerce = (bool) Settings::get('coerce', true);
-        $available = array_values(array_filter(array_keys($data), 'is_string'));
         $arguments = [];
         $records = [];
+        $context = null;
+        $coerce = null;
 
         foreach ($parameters as $parameter) {
-            if ($parameter->isVariadic()) {
+            if ($parameter->variadic) {
                 break;
             }
 
-            $name = $parameter->getName();
+            $name = $parameter->name;
             [$found, $value] = self::find($data, $parameter, $loose);
 
             if ($found) {
@@ -94,109 +95,140 @@ final class Hydrator
             }
 
             // #[Paginate] / #[Fetch]: queried once every other input is known.
-            if (($loader = Loader::for($parameter)) !== null) {
-                $records[] = [$parameter, $loader];
+            if ($parameter->records !== null) {
+                $records[] = $parameter;
 
                 continue;
             }
 
             // From the request: wrong-looking values fall through to the defaults below.
             $mismatch = null;
+            $context ??= self::context();
 
-            foreach ([fn () => self::fromRoute($parameter), fn () => self::fromQuery($parameter)] as $index => $source) {
-                [$found, $value, $field] = $source();
+            foreach ([0, 1] as $source) {
+                [$found, $value, $field] = $source === 0 ? self::fromRoute($parameter, $context) : self::fromQuery($parameter, $context[0]);
 
-                if ($found) {
-                    try {
-                        $arguments[$name] = self::cast($class, $parameter, $value, $coerce, true, $field);
+                if (! $found) {
+                    continue;
+                }
 
-                        continue 2;
-                    } catch (InvalidViewData $exception) {
-                        if ($page && $index === 0) {
-                            throw new NotFoundHttpException($exception->getMessage(), $exception);
-                        }
+                try {
+                    $arguments[$name] = self::cast($class, $parameter, $value, $coerce, true, $field);
 
-                        $mismatch = $exception;
-
-                        break;
+                    continue 2;
+                } catch (InvalidViewData $exception) {
+                    if ($page && $source === 0) {
+                        throw new NotFoundHttpException($exception->getMessage(), $exception);
                     }
+
+                    $mismatch = $exception;
+
+                    break;
                 }
             }
 
             // $user, $locale, $timezone: known by name.
             [$found, $value] = Ambient::known($parameter);
 
-            if ($found && ($value !== null || $parameter->allowsNull())) {
+            if ($found && ($value !== null || $parameter->nullable)) {
                 $arguments[$name] = $value;
 
                 continue;
             }
 
-            if ($parameter->isDefaultValueAvailable() && ! self::bound($parameter)) {
+            if ($parameter->optional && ! self::bound($parameter)) {
                 continue;
             } elseif (($service = self::service($parameter)) !== null) {
                 $arguments[$name] = $service;
-            } elseif ($parameter->allowsNull()) {
+            } elseif ($parameter->nullable) {
                 $arguments[$name] = null;
             } elseif ($mismatch !== null) {
                 // /desks/weather for a Desk enum: no such page, rather than a broken one.
                 throw new NotFoundHttpException($mismatch->getMessage(), $mismatch);
             } else {
-                throw MissingViewData::for($class, $name, (string) ($parameter->getType() ?? 'mixed'), $available);
+                throw MissingViewData::for($class, $name, (string) ($parameter->type ?? 'mixed'), array_values(array_filter(array_keys($data), 'is_string')));
             }
         }
 
-        foreach ($records as [$parameter, $loader]) {
-            $arguments[$parameter->getName()] = Loader::load($class, $parameter, $loader, $arguments);
+        foreach ($records as $parameter) {
+            $arguments[$parameter->name] = Loader::load($class, $parameter->reflection, $parameter->records, $arguments);
         }
 
-        return $reflection->newInstanceArgs($arguments);
+        return new $class(...$arguments);
+    }
+
+    /**
+     * @param  class-string  $class
+     * @return list<Parameter>|null
+     */
+    private static function blueprint(string $class): ?array
+    {
+        $constructor = (new ReflectionClass($class))->getConstructor();
+
+        return $constructor === null ? null : array_map(Parameter::of(...), $constructor->getParameters());
     }
 
     /**
      * @param  array<int|string, mixed>  $data
      * @return array{bool, mixed}
      */
-    private static function find(array $data, ReflectionParameter $parameter, bool $loose): array
+    private static function find(array $data, Parameter $parameter, bool $loose): array
     {
-        $name = $parameter->getName();
-        $keys = $loose ? array_unique([$name, Str::snake($name), Str::camel($name)]) : [$name];
-
-        foreach ($keys as $key) {
-            if (array_key_exists($key, $data)) {
-                return [true, $data[$key]];
-            }
+        if (array_key_exists($parameter->name, $data)) {
+            return [true, $data[$parameter->name]];
         }
 
-        if (! $loose && array_key_exists($parameter->getPosition(), $data)) {
-            return [true, $data[$parameter->getPosition()]];
+        if ($loose) {
+            foreach ($parameter->spellings as $key) {
+                if (array_key_exists($key, $data)) {
+                    return [true, $data[$key]];
+                }
+            }
+
+            return [false, null];
+        }
+
+        if (array_key_exists($parameter->position, $data)) {
+            return [true, $data[$parameter->position]];
         }
 
         return [false, null];
     }
 
     /**
-     * The current route's parameter of this name (snake_case or camelCase).
+     * The request, its route and the route's parameters, read once per build.
      *
-     * @return array{bool, mixed, string|null} found, value, the {post:slug} binding field
+     * @return array{Request|null, Route|null, array<string, mixed>}
      */
-    private static function fromRoute(ReflectionParameter $parameter): array
+    private static function context(): array
     {
-        $route = self::request()?->route();
+        $request = self::request();
+        $route = $request?->route();
 
         if (! $route instanceof Route) {
-            return [false, null, null];
+            return [$request, null, []];
         }
 
         try {
-            $parameters = $route->parameters();
+            return [$request, $route, $route->parameters()];
         } catch (LogicException) {
-            return [false, null, null];
+            return [$request, null, []];
         }
+    }
 
-        foreach (self::spellings($parameter->getName()) as $key) {
-            if (array_key_exists($key, $parameters) && $parameters[$key] !== null) {
-                return [true, $parameters[$key], $route->bindingFieldFor($key)];
+    /**
+     * The current route's parameter of this name (snake_case or camelCase).
+     *
+     * @param  array{Request|null, Route|null, array<string, mixed>}  $context
+     * @return array{bool, mixed, string|null} found, value, the {post:slug} binding field
+     */
+    private static function fromRoute(Parameter $parameter, array $context): array
+    {
+        [, $route, $parameters] = $context;
+
+        foreach ($parameter->spellings as $key) {
+            if (isset($parameters[$key])) {
+                return [true, $parameters[$key], $route?->bindingFieldFor($key)];
             }
         }
 
@@ -204,18 +236,15 @@ final class Hydrator
     }
 
     /** @return array{bool, mixed, null} */
-    private static function fromQuery(ReflectionParameter $parameter): array
+    private static function fromQuery(Parameter $parameter, ?Request $request): array
     {
-        $query = $parameter->getAttributes(Query::class)[0] ?? null;
-        $request = self::request();
-
-        if ($query === null || $request === null) {
+        if ($parameter->query === null || $request === null) {
             return [false, null, null];
         }
 
-        $key = $query->newInstance()->key;
+        $key = $parameter->query->key;
 
-        foreach ($key !== null ? [$key] : self::spellings($parameter->getName()) as $spelling) {
+        foreach ($key !== null ? [$key] : $parameter->spellings as $spelling) {
             $value = $request->query($spelling);
 
             if ($value !== null && $value !== '') {
@@ -237,12 +266,6 @@ final class Hydrator
         $request = $container->make('request');
 
         return $request instanceof Request ? $request : null;
-    }
-
-    /** @return list<string> */
-    private static function spellings(string $name): array
-    {
-        return array_values(array_unique([$name, Str::snake($name), Str::camel($name)]));
     }
 
     /**
@@ -285,9 +308,12 @@ final class Hydrator
         return [false, $value];
     }
 
-    private static function cast(string $class, ReflectionParameter $parameter, mixed $value, bool $coerce, bool $loose = false, ?string $field = null): mixed
+    /**
+     * @param  bool|null  $coerce  config intermidiate.coerce, read the first time a value needs converting
+     */
+    private static function cast(string $class, Parameter $parameter, mixed $value, ?bool &$coerce, bool $loose = false, ?string $field = null): mixed
     {
-        $type = $parameter->getType();
+        $type = $parameter->type;
 
         if (Types::accepts($type, $value)) {
             return $value;
@@ -298,7 +324,7 @@ final class Hydrator
             return $value->unwrap();
         }
 
-        if ($coerce) {
+        if ($coerce ??= (bool) Settings::get('coerce', true)) {
             [$ok, $converted] = self::bind($type, $value, $field);
 
             if ($ok) {
@@ -314,65 +340,46 @@ final class Hydrator
 
         // In view data, a variable that merely shares a service parameter's name
         // (a page's $navigation reaching a layout's Navigation $navigation).
-        if ($loose && self::isService($parameter) && ($service = self::service($parameter)) !== null) {
+        if ($loose && $parameter->service && ($service = self::service($parameter)) !== null) {
             return $service;
         }
 
-        throw InvalidViewData::for($class, $parameter->getName(), (string) $type, $value);
-    }
-
-    /** A class-typed parameter for a service: not a model, enum, date or collection. */
-    private static function isService(ReflectionParameter $parameter): bool
-    {
-        $type = $parameter->getType();
-
-        if (! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
-            return false;
-        }
-
-        $name = $type->getName();
-
-        return ! enum_exists($name)
-            && ! is_a($name, 'Illuminate\Database\Eloquent\Model', true)
-            && ! is_a($name, \DateTimeInterface::class, true)
-            && ! is_a($name, \Traversable::class, true)
-            && ! is_a($name, Arrayable::class, true);
+        throw InvalidViewData::for($class, $parameter->name, (string) $type, $value);
     }
 
     /** An optional service parameter is still filled when the container has it bound. */
-    private static function bound(ReflectionParameter $parameter): bool
+    private static function bound(Parameter $parameter): bool
     {
-        $type = $parameter->getType();
-
-        return $type instanceof ReflectionNamedType && ! $type->isBuiltin() && Container::getInstance()->bound($type->getName());
+        return $parameter->class !== null && Container::getInstance()->bound($parameter->class);
     }
 
-    private static function service(ReflectionParameter $parameter): ?object
+    private static function service(Parameter $parameter): ?object
     {
-        $type = $parameter->getType();
-
-        if (! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
+        if ($parameter->class === null) {
             return null;
         }
 
         try {
-            return Container::getInstance()->make($type->getName());
+            return Container::getInstance()->make($parameter->class);
         } catch (BindingResolutionException) {
             return null;
         }
     }
 
     /**
-     * @param  list<ReflectionParameter>  $parameters
+     * @param  list<Parameter>  $parameters
      * @param  array<int|string, mixed>  $data
      */
     private static function rejectUnknown(string $class, array $parameters, array $data): void
     {
-        $names = array_map(fn (ReflectionParameter $parameter) => $parameter->getName(), $parameters);
-        $variadic = $parameters !== [] && end($parameters)->isVariadic();
+        if ($parameters !== [] && $parameters[count($parameters) - 1]->variadic) {
+            return;
+        }
+
+        $names = array_map(fn (Parameter $parameter) => $parameter->name, $parameters);
 
         foreach (array_keys($data) as $key) {
-            if (is_string($key) && ! in_array($key, $names, true) && ! $variadic) {
+            if (is_string($key) && ! in_array($key, $names, true)) {
                 throw new PresenterException(sprintf(
                     '%s has no constructor parameter $%s.%s It takes: %s.',
                     $class, $key, Suggest::hint($key, $names), $names === [] ? 'nothing' : '$'.implode(', $', $names),

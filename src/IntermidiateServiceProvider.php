@@ -38,6 +38,7 @@ final class IntermidiateServiceProvider extends ServiceProvider
             (bool) $app['config']->get('intermidiate.conventions', true),
             (array) $app['config']->get('intermidiate.models', []),
             self::appNamespace($app),
+            $app->runningUnitTests(),
         ));
 
         $this->app->alias(Intermidiate::class, 'intermidiate');

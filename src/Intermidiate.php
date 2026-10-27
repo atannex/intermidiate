@@ -29,8 +29,11 @@ final class Intermidiate
     /** @var array<class-string<Presenter>, list<string>> */
     private array $bindings = [];
 
-    /** @var array<class-string<Presenter>, Presenter> the last one of each class built for a response */
+    /** @var array<class-string<Presenter>, Presenter> the last one of each class built for a response, kept only for tests */
     private array $tracked = [];
+
+    /** @var array<string, class-string<Presenter>|null> view => its Presenter, for bare @presenter */
+    private array $forView = [];
 
     /**
      * What discovery found, kept for this instance: without a cache file a
@@ -50,6 +53,7 @@ final class Intermidiate
      * @param  array<string, string>  $discover  namespace => folder
      * @param  bool  $conventions  bind Presenters without #[ForView] to the view named after their path
      * @param  array<class-string, class-string<ModelPresenter>>  $models  model => ModelPresenter, ahead of #[Presents] and names
+     * @param  bool  $tracking  keep the last Presenter of each class for assertPresenter(); off outside tests, where it would hold a request's data in long-running workers
      */
     public function __construct(
         private readonly Closure $views,
@@ -58,6 +62,7 @@ final class Intermidiate
         private readonly bool $conventions = true,
         array $models = [],
         private readonly string $appNamespace = 'App\\',
+        private readonly bool $tracking = true,
     ) {
         $this->composed = new WeakMap;
         $this->models = new Models($discover, fn () => $this->discovery()['models'], [], $appNamespace);
@@ -110,6 +115,7 @@ final class Intermidiate
         }
 
         $this->bindings[$presenter] = [...($this->bindings[$presenter] ?? []), ...$new];
+        $this->forView = [];
         ($this->views)()->composer($new, fn (View $view) => $this->compose($presenter, $view, $implicit));
 
         return $this;
@@ -225,9 +231,28 @@ final class Intermidiate
      */
     public function presenterForView(string $view): ?string
     {
-        foreach ([...$this->bindings(), ...$this->discovered()] as $presenter => $views) {
-            if (in_array($view, $views, true)) {
-                return $presenter;
+        // Resolving the factory registers the config and discovered bindings, which resets the map.
+        $bindings = $this->bindings();
+
+        if (array_key_exists($view, $this->forView)) {
+            return $this->forView[$view];
+        }
+
+        return $this->forView[$view] = $this->findPresenterForView($view, $bindings);
+    }
+
+    /**
+     * @param  array<class-string<Presenter>, list<string>>  $bindings
+     * @return class-string<Presenter>|null
+     */
+    private function findPresenterForView(string $view, array $bindings): ?string
+    {
+        // Apart, not merged: a Presenter both bound and discovered would lose its bound views.
+        foreach ([$bindings, $this->discovered()] as $map) {
+            foreach ($map as $presenter => $views) {
+                if (in_array($view, $views, true)) {
+                    return $presenter;
+                }
             }
         }
 
@@ -274,8 +299,16 @@ final class Intermidiate
             mkdir(dirname($this->cache), 0755, true);
         }
 
-        file_put_contents($this->cache, '<?php return '.var_export($found, true).';'.PHP_EOL);
+        // Written aside and renamed into place, so a request never requires half a file.
+        $temporary = $this->cache.'.'.bin2hex(random_bytes(4)).'.tmp';
+        file_put_contents($temporary, '<?php return '.var_export($found, true).';'.PHP_EOL);
+        rename($temporary, $this->cache);
+
+        if (function_exists('opcache_invalidate')) {
+            opcache_invalidate($this->cache, true);
+        }
         $this->discovery = null;
+        $this->forView = [];
 
         return $this->discovered();
     }
@@ -283,6 +316,7 @@ final class Intermidiate
     public function clearCache(): bool
     {
         $this->discovery = null;
+        $this->forView = [];
 
         return $this->cache !== null && is_file($this->cache) && unlink($this->cache);
     }
@@ -346,7 +380,9 @@ final class Intermidiate
      */
     public function track(Presenter $presenter): Presenter
     {
-        $this->tracked[$presenter::class] = $presenter;
+        if ($this->tracking) {
+            $this->tracked[$presenter::class] = $presenter;
+        }
 
         return $presenter;
     }
