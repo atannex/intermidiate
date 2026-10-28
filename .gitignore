@@ -7,4 +7,3 @@
 /phpunit.xml.dist
 /.github/workflows/tests.yml
 /CHANGELOG.md
-/stubs
