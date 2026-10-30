@@ -7,11 +7,3 @@ Keeps logic out of Laravel's Blade templates. Small PHP classes called presenter
 ```bash
 composer require atannex/intermidiate
 ```
-
-## Documentation
-
-The full guide is in [docs/overview.md](docs/overview.md).
-
-## License
-
-MIT.
