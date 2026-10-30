@@ -1,5 +1,17 @@
-# ATANNEX INTERMIDIATE
+# Atannex Intermidiate
 
-[Intermidiate](https://packages.atannex.com) is a [Laravel](https://laravel.com/) package for preparing view data in small, typed [PHP](https://www.php.net/) classes. It moves presentation logic out of [Blade templates](https://laravel.com/framework/docs/blade), keeping controllers focused on request handling and templates focused on markup.
+Keeps logic out of Laravel's Blade templates. Small PHP classes called presenters prepare everything a page needs (links, labels, dates, lists) so the templates only hold HTML. A model presenter gives every page the same links and labels for a model, and page presenters are matched to their views automatically by name.
 
-Presenters can be [returned from controllers](https://packages.atannex.com), [bound to views](https://packages.atannex.com), or [used directly as route actions](https://packages.atannex.com). [Automatic discovery and naming conventions](https://packages.atannex.com) connect presenters to their views, while [typed inputs](https://packages.atannex.com) can be resolved from view data, [route parameters](https://laravel.com/framework/docs/routing#route-parameters), [query strings](https://laravel.com/framework/docs/requests#retrieving-input-from-the-query-string), and Laravel's [service container](https://laravel.com/framework/docs/container).
+## Install
+
+```bash
+composer require atannex/intermidiate
+```
+
+## Documentation
+
+The full guide is in [docs/overview.md](docs/overview.md).
+
+## License
+
+MIT.
