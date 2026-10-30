@@ -18,6 +18,25 @@ final class Settings
             : $default;
     }
 
+    /**
+     * Whether model presenters refuse to lazy load (config intermidiate.strict).
+     * On unless set to false.
+     */
+    public static function guardsLazyLoading(): bool
+    {
+        return self::get('strict', true) !== false;
+    }
+
+    /**
+     * Whether serialization uses the 1.x rules: whole models, every computed
+     * field, raw models allowed (config intermidiate.legacy_serialization).
+     * Only a literal true turns it on, so "false" from an env file can't.
+     */
+    public static function legacySerialization(): bool
+    {
+        return self::get('legacy_serialization', false) === true;
+    }
+
     public static function pad(): int
     {
         return max(1, (int) self::get('pad', 2));

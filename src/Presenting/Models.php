@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Presenting;
 
 use Atannex\Intermidiate\Exceptions\PresenterException;
+use Atannex\Intermidiate\Intermidiate;
 use Atannex\Intermidiate\Slicing\Group;
+use Atannex\Intermidiate\Slicing\Partitioned;
+use Atannex\Intermidiate\Support\Settings;
 use Closure;
+use Illuminate\Container\Container;
 use Illuminate\Pagination\AbstractCursorPaginator;
 use Illuminate\Pagination\AbstractPaginator;
 use Illuminate\Support\Collection;
@@ -107,28 +111,58 @@ final class Models
     }
 
     /**
-     * Wraps the models in a value: a model, a collection, a paginator (which
-     * keeps its links) or a Group (which keeps its numbers). Anything else,
-     * and models without a presenter, pass through.
+     * Wraps the models in a value: a model, a collection (nested ones too;
+     * an Eloquent collection becomes a base one), a paginator (a copy, which
+     * keeps its links), a Group (which keeps its numbers) or a Partitioned.
+     * Arrays, anything else, and models without a presenter pass through.
      *
      * @param  class-string<ModelPresenter>|null  $presenter  force this one instead of looking it up
      */
     public function wrap(mixed $value, ?string $presenter = null): mixed
     {
         return match (true) {
+            // Arrays are containers the app built (often for other presenters or components): left as they are.
             $value instanceof ModelPresenter, $value instanceof Closure, $value === null, is_scalar($value), is_array($value) => $value,
             $value instanceof Collection => $this->each($value, $presenter),
-            $value instanceof Group => $value->map(fn (mixed $item) => $this->one($item, $presenter)),
+            $value instanceof Group => $value->map(fn (mixed $item) => $this->wrap($item, $presenter)),
+            $value instanceof Partitioned => $this->partitioned($value, $presenter),
             $value instanceof AbstractPaginator, $value instanceof AbstractCursorPaginator => $this->paginator($value, $presenter),
             is_object($value) => $this->one($value, $presenter),
             default => $value,
         };
     }
 
+    /**
+     * @internal A Presenter member's value as its view gets it: its models
+     * wrapped in their presenter, unless presenting is off (config
+     * intermidiate.present) and the member isn't marked #[Present].
+     *
+     * @param  string|bool|null  $policy  null: by config; true: #[Present]; a class: #[Present(Class)]
+     */
+    public static function wrapMember(mixed $value, string|bool|null $policy): mixed
+    {
+        // Nothing in these could be a model.
+        if ($value === null || is_scalar($value) || is_array($value) || $value instanceof Closure) {
+            return $value;
+        }
+
+        if ($policy === null && ! Settings::get('present', true)) {
+            return $value;
+        }
+
+        $container = Container::getInstance();
+
+        if (! $container->bound(Intermidiate::class)) {
+            return $value;
+        }
+
+        return $container->make(Intermidiate::class)->models()->wrap($value, is_string($policy) ? $policy : null);
+    }
+
     /** @param  class-string<ModelPresenter>|null  $presenter */
     private function one(mixed $item, ?string $presenter): mixed
     {
-        if (! is_object($item) || $item instanceof ModelPresenter || $item instanceof Collection) {
+        if (! is_object($item) || $item instanceof ModelPresenter) {
             return $item;
         }
 
@@ -144,10 +178,24 @@ final class Models
      */
     private function each(Collection $items, ?string $presenter): Collection
     {
-        $wrapped = $items->toBase()->map(fn (mixed $item) => $this->one($item, $presenter));
+        $changed = false;
+        $wrapped = $items->toBase()->map(function (mixed $item) use ($presenter, &$changed) {
+            $result = $this->wrap($item, $presenter);
+            $changed = $changed || $result !== $item;
+
+            return $result;
+        });
 
         // Nothing to present: hand back the original (an Eloquent collection stays one).
-        return $wrapped->contains(fn (mixed $item) => $item instanceof ModelPresenter) ? $wrapped : $items;
+        return $changed ? $wrapped : $items;
+    }
+
+    /** Each group wrapped; the source paginator stays as it is, for links(). */
+    private function partitioned(Partitioned $partitioned, ?string $presenter): Partitioned
+    {
+        $wrap = fn (Group $group) => $group->map(fn (mixed $item) => $this->wrap($item, $presenter));
+
+        return new Partitioned(array_map($wrap, $partitioned->groups()), $wrap($partitioned->remainder()), $partitioned->applied(), $partitioned->source());
     }
 
     /** @param  class-string<ModelPresenter>|null  $presenter */

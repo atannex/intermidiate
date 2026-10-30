@@ -56,7 +56,7 @@ final class MakePresenterCommand extends GeneratorCommand
     /** "archive.month", "archive/month" and "Archive/Month" all become Archive/MonthPresenter. */
     protected function getNameInput(): string
     {
-        $segments = preg_split('#[./\\\\]+#', trim((string) $this->argument('name'), " ./\\")) ?: [];
+        $segments = preg_split('#[./\\\\]+#', trim((string) $this->argument('name'), ' ./\\')) ?: [];
         $segments = array_map(fn (string $segment) => Str::studly($segment), $segments);
         $last = (string) array_pop($segments);
         $segments[] = Str::endsWith($last, 'Presenter') ? $last : $last.'Presenter';

@@ -9,7 +9,7 @@ use Atannex\Intermidiate\Support\Numeral;
 /**
  * One item of a group, with its place on the page worked out:
  *
- *     @foreach ($ledger->entries() as $entry)
+ *     <p>@foreach ($ledger->entries() as $entry)
  *         <span>{{ $entry->folio }}</span> {{ $entry->item->title }}
  *
  *     @endforeach

@@ -11,6 +11,7 @@ use Atannex\Intermidiate\Presenting\ModelPresenter;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -67,7 +68,6 @@ final class Hydrator
         }
 
         $arguments = [];
-        $records = [];
         $context = null;
         $coerce = null;
 
@@ -90,13 +90,6 @@ final class Hydrator
 
             if ($found) {
                 $arguments[$name] = $value === null ? null : self::cast($class, $parameter, $value, $coerce, true);
-
-                continue;
-            }
-
-            // #[Paginate] / #[Fetch]: queried once every other input is known.
-            if ($parameter->records !== null) {
-                $records[] = $parameter;
 
                 continue;
             }
@@ -148,10 +141,6 @@ final class Hydrator
             } else {
                 throw MissingViewData::for($class, $name, (string) ($parameter->type ?? 'mixed'), array_values(array_filter(array_keys($data), 'is_string')));
             }
-        }
-
-        foreach ($records as $parameter) {
-            $arguments[$parameter->name] = Loader::load($class, $parameter->reflection, $parameter->records, $arguments);
         }
 
         return new $class(...$arguments);
@@ -263,9 +252,7 @@ final class Hydrator
             return null;
         }
 
-        $request = $container->make('request');
-
-        return $request instanceof Request ? $request : null;
+        return $container->make('request');
     }
 
     /**
@@ -298,7 +285,7 @@ final class Hydrator
                 return [true, $instance];
             }
 
-            if (class_exists(ModelNotFoundException::class)) {
+            if (is_a($model, Model::class, true)) {
                 throw (new ModelNotFoundException)->setModel($model, [$value]);
             }
 

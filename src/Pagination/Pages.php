@@ -22,9 +22,9 @@ use Traversable;
  * the item range, previous/next links and a windowed list of page links
  * with gaps and the current page marked.
  *
- *     @foreach ($pages as $link)
+ *     <nav>@foreach ($pages as $link)
  *
- *         @if ($link->gap) <span>…</span>
+ *         {{-- a gap --}} @if ($link->gap) <span>…</span>
  *
  *         @else <a href="{{ $link->url }}" aria-current="{{ $link->ariaCurrent() }}">{{ $link->folio }}</a>
  *
@@ -86,7 +86,7 @@ final class Pages implements Arrayable, Countable, IteratorAggregate, JsonSerial
 
     public function onFirstPage(): bool
     {
-        return $this->paginator->onFirstPage();
+        return $this->paginator instanceof Paginator ? $this->paginator->currentPage() <= 1 : $this->paginator->previousPageUrl() === null;
     }
 
     public function onLastPage(): bool

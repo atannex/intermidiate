@@ -96,7 +96,7 @@ final class Menu implements Arrayable, Countable, IteratorAggregate, JsonSeriali
         iterable $children = [],
     ): self {
         // Built at once: the fluent setters copy the item each time.
-        $item = new Item($key, $label, $url, $activeOn === null ? [] : array_values(is_array($activeOn) ? $activeOn : [$activeOn]), $icon, $badge, $meta);
+        $item = new Item($key, $label, $url, $activeOn === null ? [] : (is_array($activeOn) ? $activeOn : [$activeOn]), $icon, $badge, $meta);
 
         if ($children !== []) {
             $item = $item->withChildren($children);

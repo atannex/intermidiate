@@ -109,11 +109,46 @@ return [
     |--------------------------------------------------------------------------
     |
     | A Presenter returned from a controller answers requests that expect JSON
-    | with its exported data instead of the rendered view.
+    | with its members (minus closures and #[ViewOnly]) instead of the
+    | rendered view. Off by default since 2.0: any visitor can ask for JSON,
+    | so turn it on only for Presenters whose members are safe to publish.
+    | For a JSON API, use Laravel's API Resources.
     |
     */
 
-    'json' => true,
+    'json' => false,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Strict presenting
+    |--------------------------------------------------------------------------
+    |
+    | On, model presenters work only on what the application loaded: reading
+    | an unloaded relation through one fails before querying, and computed
+    | fields run with lazy loading off for the model and the models loaded
+    | with it. Off, they lazy load as in 1.x. Serialization isn't affected.
+    |
+    */
+
+    'strict' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy serialization
+    |--------------------------------------------------------------------------
+    |
+    | Off (the default), serialized output (a model presenter's toArray(), a
+    | Presenter's JSON) holds only what each model presenter's $visible
+    | lists, and raw models, closures and plain objects are refused.
+    |
+    | On, the 1.x rules come back: a model presenter serializes its whole
+    | model (every attribute not in $hidden) plus every computed field, and
+    | raw models are serialized whole. That can publish columns nobody
+    | chose to expose. Only a literal true turns it on.
+    |
+    */
+
+    'legacy_serialization' => false,
 
     /*
     |--------------------------------------------------------------------------

@@ -8,11 +8,9 @@ use Atannex\Intermidiate\Attributes\Config;
 use Atannex\Intermidiate\Attributes\CurrentUser;
 use Atannex\Intermidiate\Attributes\Old;
 use Atannex\Intermidiate\Attributes\Query;
-use Atannex\Intermidiate\Attributes\Records;
 use Atannex\Intermidiate\Attributes\Session;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Str;
-use ReflectionAttribute;
 use ReflectionNamedType;
 use ReflectionParameter;
 use ReflectionType;
@@ -41,7 +39,6 @@ final class Parameter
         public readonly ?string $class,
         public readonly bool $service,
         public readonly Config|Old|Session|CurrentUser|null $marker,
-        public readonly ?Records $records,
         public readonly ?Query $query,
         public readonly ?string $known,
     ) {}
@@ -64,7 +61,6 @@ final class Parameter
             $class,
             $class !== null && self::isService($class),
             self::marker($parameter),
-            ($parameter->getAttributes(Records::class, ReflectionAttribute::IS_INSTANCEOF)[0] ?? null)?->newInstance(),
             ($parameter->getAttributes(Query::class)[0] ?? null)?->newInstance(),
             Ambient::kind($parameter),
         );

@@ -6,29 +6,44 @@ namespace Atannex\Intermidiate\Presenting;
 
 use ArrayAccess;
 use Atannex\Intermidiate\Exceptions\PresenterException;
+use Atannex\Intermidiate\Exceptions\UnsafeAccess;
+use Atannex\Intermidiate\Intermidiate;
 use Atannex\Intermidiate\Support\Member;
 use Atannex\Intermidiate\Support\Schema;
+use Atannex\Intermidiate\Support\Settings;
+use Closure;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Pagination\CursorPaginator;
-use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Contracts\Pagination\Paginator;
+use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use JsonSerializable;
 
 /**
- * Presentation logic for one model (or array): computed fields as methods,
- * everything else read straight from the wrapped value.
+ * How one model (or array) is displayed, wherever it is shown: its derived
+ * display values as methods, defined once instead of in every template.
  *
- *     final class StoryCard extends ModelPresenter
+ *     final class PostPresenter extends ModelPresenter
  *     {
+ *         protected array $visible = ['id', 'title', 'permalink'];
+ *
+ *         public function permalink(): string { return route('posts.show', $this->subject->slug); }
  *         public function kicker(): string { return Str::upper($this->subject->category?->name ?? 'News'); }
  *     }
  *
- *     {{ $card->kicker }}  {{ $card->title }}   {{-- computed, then forwarded --}}
+ *     {{ $post->permalink }}  {{ $post->kicker }}  {{ $post->title }}   {{-- computed, computed, the model's --}}
  *
- * Computed fields run once per presenter. A method of the subject can be
- * called through the presenter too, and route('posts.show', $card) uses
- * the model's route key.
+ * A page Presenter's models reach its view already wrapped in theirs (found
+ * by name, #[Presents] or config intermidiate.models), and so do
+ * collections and paginators. Computed fields run once per presenter.
+ *
+ * In a view, any other read goes to the model, as it would without the
+ * presenter (Laravel's Model::preventAccessingMissingAttributes() still
+ * applies), and route('posts.show', $post) uses the model's route key.
+ * Serialized (toArray(), JSON, a Presenter's JSON) only what $visible
+ * names leaves: attributes and computed fields alike.
  *
  * @template TSubject
  *
@@ -37,8 +52,18 @@ use JsonSerializable;
  */
 abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializable, UrlRoutable
 {
-    /** @var array<string, mixed> */
-    private array $computed = [];
+    /**
+     * What serializes (toArray(), JSON, a Presenter's JSON): the subject's
+     * attributes and this class's computed fields named here, in this
+     * order, and nothing else. Attributes the model hides are refused.
+     * With config intermidiate.legacy_serialization on, the whole subject
+     * and every computed field serialize instead, as in 1.x.
+     *
+     * @var list<string>
+     */
+    protected array $visible = [];
+
+    private ?Memo $memo = null;
 
     /**
      * @param  TSubject  $subject
@@ -63,7 +88,7 @@ abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializabl
     {
         $items = $subjects instanceof Paginator || $subjects instanceof CursorPaginator ? $subjects->items() : $subjects;
 
-        return (new Collection($items))->filter(fn ($subject) => $subject !== null)->map(fn ($subject) => new static($subject))->values();
+        return (new Collection($items))->filter(fn ($subject) => $subject !== null)->map(fn ($subject) => static::make($subject))->values();
     }
 
     /** @return TSubject */
@@ -77,16 +102,16 @@ abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializabl
         $member = $this->member($name);
 
         if ($member !== null) {
-            return $this->compute($member);
+            return $this->guarded(fn () => Engine::value($member, $this, $this->memo ??= new Memo));
         }
 
-        return is_array($this->subject) ? ($this->subject[$name] ?? null) : $this->subject->{$name};
+        return $this->read($name);
     }
 
     public function __isset(string $name): bool
     {
         if (($member = $this->member($name)) !== null) {
-            return $this->compute($member) !== null;
+            return $this->guarded(fn () => Engine::value($member, $this, $this->memo ??= new Memo)) !== null;
         }
 
         return is_array($this->subject) ? isset($this->subject[$name]) : isset($this->subject->{$name});
@@ -125,27 +150,16 @@ abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializabl
     }
 
     /**
-     * The subject's array form plus every computed field.
+     * The fields named in $visible as JSON-compatible data (nested models
+     * in their own presenter). With config intermidiate.legacy_serialization
+     * on, the subject's whole array form plus every computed field, as in 1.x.
      *
      * @return array<string, mixed>
      */
     public function toArray(): array
     {
-        $data = match (true) {
-            is_array($this->subject) => $this->subject,
-            $this->subject instanceof Arrayable => $this->subject->toArray(),
-            $this->subject instanceof JsonSerializable => (array) $this->subject->jsonSerialize(),
-            default => [],
-        };
-
-        foreach (Schema::of($this)->members as $key => $member) {
-            if ($member->kind !== Member::CALLABLE && ! $member->viewOnly) {
-                $value = $this->compute($member);
-                $data[$key] = $value instanceof Arrayable ? $value->toArray() : $value;
-            }
-        }
-
-        return $data;
+        /** @var array<string, mixed> */
+        return Engine::serialize($this, ! Settings::legacySerialization(), static::class);
     }
 
     public function jsonSerialize(): array
@@ -167,20 +181,167 @@ abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializabl
         return $this->subject instanceof UrlRoutable ? $this->subject->getRouteKeyName() : 'id';
     }
 
-    /** @return static|null */
     public function resolveRouteBinding($value, $field = null): ?static
     {
         $model = $this->subject instanceof UrlRoutable ? $this->subject->resolveRouteBinding($value, $field) : null;
 
-        return $model === null ? null : new static($model);
+        return $model === null ? null : static::make($model);
     }
 
-    /** @return static|null */
     public function resolveChildRouteBinding($childType, $value, $field): ?static
     {
         $model = $this->subject instanceof UrlRoutable ? $this->subject->resolveChildRouteBinding($childType, $value, $field) : null;
 
-        return $model === null ? null : new static($model);
+        return $model === null ? null : static::make($model);
+    }
+
+    /**
+     * @internal The fields to serialize, before serializing: what toArray()
+     * and a Presenter's JSON walk.
+     *
+     * @return array<string, mixed>
+     */
+    public function declaredFields(bool $strict): array
+    {
+        if (! $strict) {
+            $data = match (true) {
+                is_array($this->subject) => $this->subject,
+                $this->subject instanceof Arrayable => $this->subject->toArray(),
+                $this->subject instanceof JsonSerializable => (array) $this->subject->jsonSerialize(),
+                default => [],
+            };
+
+            return [...$data, ...$this->guarded(fn () => Engine::values(Schema::of($this), $this, $this->memo ??= new Memo, json: true))];
+        }
+
+        return $this->guarded(function (): array {
+            $schema = Schema::of($this);
+            $data = [];
+
+            foreach ($this->visible as $key) {
+                $member = $schema->members[$key] ?? null;
+
+                if ($member === null) {
+                    $data[$key] = Models::wrapMember($this->attribute($key), null);
+                } elseif ($member->kind === Member::CALLABLE || $member->viewOnly) {
+                    throw new PresenterException(static::class." lists \"{$key}\" in \$visible, but it ".($member->viewOnly ? 'is #[ViewOnly]' : 'takes parameters').' and can\'t be serialized.');
+                } else {
+                    $data[$key] = Engine::value($member, $this, $this->memo ??= new Memo);
+                }
+            }
+
+            return $data;
+        });
+    }
+
+    /** A subject attribute listed in $visible: never one the model hides. */
+    private function attribute(string $key): mixed
+    {
+        if ($this->subject instanceof Model && in_array($key, $this->subject->getHidden(), true)) {
+            throw UnsafeAccess::hidden(static::class, $this->subject::class, $key);
+        }
+
+        return $this->read($key);
+    }
+
+    /**
+     * Context a #[Cached] member's value depends on beyond the inputs, the
+     * locale and the signed-in user, such as the current tenant:
+     *
+     *     protected function cacheScope(): array { return ['tenant' => tenant()->id]; }
+     *
+     * @return array<string, mixed>
+     */
+    protected function cacheScope(): array
+    {
+        return [];
+    }
+
+    /**
+     * Wraps related models in their model presenter, for computed fields
+     * that hand them on (their values aren't wrapped on their own):
+     *
+     *     public function lessons(): Collection { return $this->present($this->subject->lessons); }
+     *
+     * @param  class-string<ModelPresenter>|null  $presenter  this one instead of the one found for each model
+     */
+    protected function present(mixed $value, ?string $presenter = null): mixed
+    {
+        $container = Container::getInstance();
+
+        if ($container->bound(Intermidiate::class)) {
+            return $container->make(Intermidiate::class)->wrap($value, $presenter);
+        }
+
+        return $presenter === null ? $value : (is_iterable($value) ? $presenter::collection($value) : $presenter::make($value));
+    }
+
+    /** One of the subject's own values; strict, an unloaded relation fails instead of querying. */
+    private function read(string $key): mixed
+    {
+        if (is_array($this->subject)) {
+            return $this->subject[$key] ?? null;
+        }
+
+        if ($this->subject instanceof Model && ! $this->subject->relationLoaded($key) && $this->subject->isRelation($key) && Settings::guardsLazyLoading()) {
+            throw UnsafeAccess::unloaded(static::class, $this->subject::class, $key);
+        }
+
+        return $this->subject->{$key};
+    }
+
+    /**
+     * Runs a computed field with lazy loading turned off for the subject
+     * and every model loaded with it (strict only), so the field reads only
+     * what the application loaded. Laravel then throws
+     * LazyLoadingViolationException, or calls the app's own
+     * Model::handleLazyLoadingViolationUsing() handler.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     */
+    private function guarded(Closure $work): mixed
+    {
+        if (! $this->subject instanceof Model || ! Settings::guardsLazyLoading()) {
+            return $work();
+        }
+
+        $models = [];
+        self::loaded($this->subject, $models);
+        $previous = [];
+
+        foreach ($models as $id => $model) {
+            $previous[$id] = $model->preventsLazyLoading;
+            $model->preventsLazyLoading = true;
+        }
+
+        try {
+            return $work();
+        } finally {
+            foreach ($models as $id => $model) {
+                $model->preventsLazyLoading = $previous[$id];
+            }
+        }
+    }
+
+    /** @param  array<int, Model>  $models  the model and its loaded relations, at any depth */
+    private static function loaded(Model $model, array &$models): void
+    {
+        if (isset($models[$id = spl_object_id($model)]) || count($models) >= 1000) {
+            return;
+        }
+
+        $models[$id] = $model;
+
+        foreach ($model->getRelations() as $related) {
+            foreach ($related instanceof Model ? [$related] : (is_iterable($related) ? $related : []) as $item) {
+                if ($item instanceof Model) {
+                    self::loaded($item, $models);
+                }
+            }
+        }
     }
 
     private function member(string $name): ?Member
@@ -188,18 +349,5 @@ abstract class ModelPresenter implements Arrayable, ArrayAccess, JsonSerializabl
         $member = Schema::of($this)->member($name);
 
         return $member !== null && $member->kind !== Member::CALLABLE ? $member : null;
-    }
-
-    private function compute(Member $member): mixed
-    {
-        if ($member->kind === Member::PROPERTY) {
-            return $this->{$member->name};
-        }
-
-        if (! array_key_exists($member->name, $this->computed)) {
-            $this->computed[$member->name] = $this->{$member->name}();
-        }
-
-        return $this->computed[$member->name];
     }
 }

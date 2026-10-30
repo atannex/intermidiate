@@ -113,6 +113,12 @@ final class Schema
                 continue;
             }
 
+            $cached = ($method->getAttributes(Cached::class)[0] ?? null)?->newInstance();
+
+            if ($cached !== null && $method->getNumberOfParameters() > 0) {
+                throw new PresenterException("{$class}::{$name}() can't be #[Cached]: it takes parameters, and only methods without parameters are cached.");
+            }
+
             self::add($members, $class, new Member(
                 self::key($method, $name),
                 $name,
@@ -121,7 +127,7 @@ final class Schema
                 self::has($method, Lazy::class),
                 self::has($method, ViewOnly::class),
                 self::present($method),
-                ($method->getAttributes(Cached::class)[0] ?? null)?->newInstance(),
+                $cached,
             ));
         }
 

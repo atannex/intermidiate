@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Atannex\Intermidiate\Support;
 
 use InvalidArgumentException;
-use NumberFormatter;
 
 /**
  * Numbers the way editorial layouts print them: folios ("03"), counters
- * ("03 / 12"), ordinals, roman numerals, short counts ("1.2K") and bar widths.
+ * ("03 / 12"), roman numerals and bar widths. Ordinals and short counts are Laravel's Number::ordinal() and Number::abbreviate().
  */
 final class Numeral
 {
@@ -35,24 +34,6 @@ final class Numeral
         return self::pad($number, $width).$separator.self::pad($total, $width);
     }
 
-    /** 1 → "1st", 22 → "22nd" (in the app locale when intl is installed). */
-    public static function ordinal(int $number, ?string $locale = null): string
-    {
-        $locale ??= Settings::locale();
-
-        if (class_exists(NumberFormatter::class)) {
-            $formatted = (new NumberFormatter($locale, NumberFormatter::ORDINAL))->format($number);
-
-            if ($formatted !== false) {
-                return $formatted;
-            }
-        }
-
-        $suffix = in_array($number % 100, [11, 12, 13], true) ? 'th' : (['th', 'st', 'nd', 'rd'][$number % 10] ?? 'th');
-
-        return $number.$suffix;
-    }
-
     /** 2026 → "MMXXVI". */
     public static function roman(int $number): string
     {
@@ -69,33 +50,6 @@ final class Numeral
         }
 
         return $roman;
-    }
-
-    /** 1250 → "1.3K", 2_400_000 → "2.4M". */
-    public static function short(int|float $number, int $precision = 1): string
-    {
-        $units = ['', 'K', 'M', 'B', 'T'];
-        $sign = $number < 0 ? '-' : '';
-        $number = abs($number);
-        $unit = 0;
-
-        while ($number >= 1000 && $unit < count($units) - 1) {
-            $number /= 1000;
-            $unit++;
-        }
-
-        if (round($number, $precision) >= 1000 && $unit < count($units) - 1) {
-            $number /= 1000;
-            $unit++;
-        }
-
-        $formatted = number_format($number, $unit === 0 ? 0 : $precision, '.', '');
-
-        if (str_contains($formatted, '.')) {
-            $formatted = rtrim(rtrim($formatted, '0'), '.');
-        }
-
-        return $sign.$formatted.$units[$unit];
     }
 
     /** Share of a whole in percent; 0 when the whole is 0. */

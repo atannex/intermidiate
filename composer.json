@@ -1,11 +1,12 @@
 {
     "name": "atannex/intermidiate",
-    "description": "Type-safe Presenters for Laravel: move data shaping, collection slicing, calendars, numbering, pagination and active states out of Blade and into small PHP classes, so views only hold markup.",
+    "description": "Display logic for Laravel, written once: model presenters give every view the same links, labels and dates for a model, and page Presenters prepare view data, so Blade only holds markup.",
     "keywords": [
         "laravel",
         "presenter",
         "presenters",
         "model-presenter",
+        "view-model",
         "blade",
         "view-composer",
         "seo",
@@ -35,6 +36,9 @@
         "nesbot/carbon": "^2.72|^3.0"
     },
     "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "livewire/livewire": "^3.5",
         "orchestra/testbench": "^9.0|^10.0",
         "phpunit/phpunit": "^11.5"
     },
@@ -58,11 +62,19 @@
             }
         },
         "branch-alias": {
-            "dev-main": "1.x-dev"
+            "dev-main": "2.x-dev"
         }
     },
     "scripts": {
-        "test": "phpunit"
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "format:check": "pint --test",
+        "check": [
+            "@format:check",
+            "@analyse",
+            "@test"
+        ]
     },
     "config": {
         "sort-packages": true

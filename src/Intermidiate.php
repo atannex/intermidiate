@@ -91,6 +91,23 @@ final class Intermidiate
         return $this->appNamespace;
     }
 
+    /**
+     * Wraps the models in a value in their model presenter, as a page
+     * Presenter's members are: for values that aren't wrapped on their own
+     * (->with() data, arrays, plain view data). Asked for explicitly, arrays
+     * are wrapped too, at any depth, keeping their keys.
+     *
+     *     ->with('related', Intermidiate::wrap($related))
+     *
+     * @param  class-string<ModelPresenter>|null  $presenter  this one instead of the one found for each model
+     */
+    public function wrap(mixed $value, ?string $presenter = null): mixed
+    {
+        return is_array($value)
+            ? array_map(fn (mixed $item) => $this->wrap($item, $presenter), $value)
+            : $this->models->wrap($value, $presenter);
+    }
+
     /** Finds ModelPresenters for models and wraps values in them. */
     public function models(): Models
     {

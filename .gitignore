@@ -7,3 +7,4 @@
 /phpunit.xml.dist
 /.github/workflows/tests.yml
 /CHANGELOG.md
+/.phpstan.cache/

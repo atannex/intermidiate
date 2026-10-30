@@ -20,8 +20,8 @@ use Traversable;
  * A month as a grid of weeks, padded with the neighbouring months' days so
  * every row has seven cells, plus the weekday headings in the right order.
  *
- *     @foreach ($calendar->weekdays() as $weekday) <th>{{ $weekday->short }}</th> @endforeach
- *     @foreach ($calendar->weeks() as $week)
+ *     <tr>@foreach ($calendar->weekdays() as $weekday) <th>{{ $weekday->short }}</th> @endforeach</tr>
+ *     {{-- weeks --}} @foreach ($calendar->weeks() as $week)
  *         <tr> @foreach ($week as $day) <td @class(['muted' => ! $day->inMonth])>{{ $day->number }}</td> @endforeach </tr>
  *
  *     @endforeach

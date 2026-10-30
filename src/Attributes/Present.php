@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atannex\Intermidiate\Attributes;
 
+use Atannex\Intermidiate\Presenting\ModelPresenter;
 use Attribute;
 
 /**
@@ -16,6 +17,6 @@ use Attribute;
 #[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_METHOD)]
 final class Present
 {
-    /** @param  class-string<\Atannex\Intermidiate\Presenting\ModelPresenter>|null  $presenter  null: the one found for each model */
+    /** @param  class-string<ModelPresenter>|null  $presenter  null: the one found for each model */
     public function __construct(public readonly ?string $presenter = null) {}
 }

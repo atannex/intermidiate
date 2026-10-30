@@ -50,7 +50,7 @@ final class Convention
 
         $relative = implode('\\', array_map(fn (string $segment) => Str::studly($segment), explode('.', $view))).'Presenter';
 
-        return array_values(array_map(fn (string $namespace) => trim($namespace, '\\').'\\'.$relative, array_keys($namespaces)));
+        return array_map(fn (string $namespace) => trim($namespace, '\\').'\\'.$relative, array_keys($namespaces));
     }
 
     /**

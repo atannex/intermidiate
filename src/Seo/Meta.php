@@ -317,27 +317,31 @@ final class Meta implements Htmlable, Stringable
         $tags[] = self::tag('name', 'robots', $this->robots);
         $tags[] = $url === null ? null : '<link rel="canonical" href="'.e($url).'">';
 
-        foreach ([
-            'og:type' => $this->type,
-            'og:site_name' => $site,
-            'og:title' => $this->shareTitle ?? $this->title ?? $site,
-            'og:description' => $this->description,
-            'og:url' => $url,
-            'og:image' => $this->image,
-            'og:locale' => $this->ogLocale(),
-            ...$this->properties,
-        ] as $property => $content) {
+        foreach (
+            [
+                'og:type' => $this->type,
+                'og:site_name' => $site,
+                'og:title' => $this->shareTitle ?? $this->title ?? $site,
+                'og:description' => $this->description,
+                'og:url' => $url,
+                'og:image' => $this->image,
+                'og:locale' => $this->ogLocale(),
+                ...$this->properties,
+            ] as $property => $content
+        ) {
             $tags[] = self::tag('property', $property, $content);
         }
 
-        foreach ([
-            'twitter:card' => $this->card ?? ($this->image === null ? 'summary' : 'summary_large_image'),
-            'twitter:site' => Settings::get('seo.twitter'),
-            'twitter:title' => $this->shareTitle ?? $this->title ?? $site,
-            'twitter:description' => $this->description,
-            'twitter:image' => $this->image,
-            ...$this->names,
-        ] as $name => $content) {
+        foreach (
+            [
+                'twitter:card' => $this->card ?? ($this->image === null ? 'summary' : 'summary_large_image'),
+                'twitter:site' => Settings::get('seo.twitter'),
+                'twitter:title' => $this->shareTitle ?? $this->title ?? $site,
+                'twitter:description' => $this->description,
+                'twitter:image' => $this->image,
+                ...$this->names,
+            ] as $name => $content
+        ) {
             $tags[] = self::tag('name', $name, $content);
         }
 

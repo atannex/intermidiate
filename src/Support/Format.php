@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
  *     Format::date($date, 'long');         // named formats from config intermidiate.dates
  *     Format::relative($date);             // "3 hours ago", or the date once it's older than a week
  *     Format::date($date, 'time', 'Africa/Douala');   // in another timezone
- *     Format::count(1204, 'story');        // "1,204 stories"
+ *     Format::count(1204, 'story');        // "1,204 stories", through the translator's plural rules
  *     Format::initials('Ma Ngum');         // "MN"
  *     Format::readingTime($post->body);    // 4 (minutes)
  */
@@ -58,26 +58,7 @@ final class Format
     {
         $text = html_entity_decode(strip_tags(str_replace(['<br', '</p>', '</li>', '</h'], [' <br', ' </p>', ' </li>', ' </h'], (string) $html)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
-        return self::squish($text);
-    }
-
-    /**
-     * Str::squish(), same output, about 5× faster on an article body: its
-     * trim tests a 60-character class at every position of the text, and
-     * its (\s|…)+ group backtracks. Here runs collapse with a class, and
-     * only the two ends are trimmed.
-     */
-    private static function squish(string $text): string
-    {
-        $text = (string) preg_replace('~[\s\x{3164}\x{1160}]+~u', ' ', $text);
-        $edge = '[\s'.(defined(Str::class.'::INVISIBLE_CHARACTERS') ? Str::INVISIBLE_CHARACTERS : '\x{FEFF}\x{200B}\x{200E}')." \n\r\t\v\\0]";
-        $text = (string) preg_replace('~^'.$edge.'++~u', '', $text);
-
-        while ($text !== '' && preg_match('~^'.$edge.'$~uD', $last = mb_substr($text, -1)) === 1) {
-            $text = substr($text, 0, -strlen($last));
-        }
-
-        return $text;
+        return Str::squish($text);
     }
 
     /**
@@ -152,7 +133,11 @@ final class Format
         return $date->translatedFormat(self::pattern($format));
     }
 
-    /** "1,234", or "1,234.5" with decimals. */
+    /**
+     * "1,234", or "1,234.5" with decimals.
+     *
+     * @deprecated 2.0 This is number_format(); use it, or Illuminate\Support\Number::format() for locale-aware output. Removed in 3.0.
+     */
     public static function number(int|float $number, int $decimals = 0): string
     {
         return number_format($number, $decimals);
@@ -167,7 +152,7 @@ final class Format
     {
         $plural = Str::plural($noun, (int) $count);
         $decimals = is_float($count) && floor($count) !== $count ? 1 : 0;
-        $shown = $group ? self::number($count, $decimals) : (string) ($decimals ? round($count, 1) : (int) $count);
+        $shown = $group ? number_format($count, $decimals) : (string) ($decimals ? round($count, 1) : (int) $count);
         $key = ':count '.$plural;
         $container = Container::getInstance();
 

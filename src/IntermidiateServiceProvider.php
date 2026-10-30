@@ -153,7 +153,8 @@ final class IntermidiateServiceProvider extends ServiceProvider
             TidyCommand::class,
         ]);
 
-        if (method_exists($this, 'optimizes')) {
+        // Only on Laravel versions that have optimizes().
+        if ((new ReflectionClass(ServiceProvider::class))->hasMethod('optimizes')) {
             $this->optimizes(optimize: 'presenter:cache', clear: 'presenter:clear');
         }
     }

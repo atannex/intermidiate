@@ -6,17 +6,15 @@ namespace Atannex\Intermidiate;
 
 use ArrayAccess;
 use ArrayIterator;
-use Atannex\Intermidiate\Attributes\Cached;
 use Atannex\Intermidiate\Exceptions\PresenterException;
 use Atannex\Intermidiate\Exceptions\UnknownMember;
 use Atannex\Intermidiate\Http\Routed;
+use Atannex\Intermidiate\Presenting\Engine;
+use Atannex\Intermidiate\Presenting\Memo;
 use Atannex\Intermidiate\Presenting\ModelPresenter;
 use Atannex\Intermidiate\Presenting\Models;
 use Atannex\Intermidiate\Slicing\Partition;
-use Atannex\Intermidiate\Support\Deferred;
-use Atannex\Intermidiate\Support\Fingerprint;
 use Atannex\Intermidiate\Support\Hydrator;
-use Atannex\Intermidiate\Support\Member;
 use Atannex\Intermidiate\Support\Schema;
 use Atannex\Intermidiate\Support\Settings;
 use Closure;
@@ -45,27 +43,24 @@ use Traversable;
  *
  *     return ArchivePresenter::make(posts: $posts, year: $year)->view('date');
  *
+ * Members are read, memoized and serialized by the same engine as model
+ * presenters.
+ *
  * @implements ArrayAccess<string, mixed>
  * @implements Arrayable<string, mixed>
  * @implements IteratorAggregate<string, mixed>
  */
 abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, JsonSerializable, Responsable
 {
-    /** @var array<string, mixed> */
-    private array $resolved = [];
+    /** @var array<string, mixed> once() values */
+    private array $once = [];
 
     /** @var array<string, mixed> */
     private array $extra = [];
 
-    /** @var array<string, array{mixed, mixed}> property name => [value, presented value] */
-    private array $presented = [];
+    private ?Memo $memo = null;
 
     private ?string $template = null;
-
-    private bool $prepared = false;
-
-    /** @var array{bool, Models|null}|null config intermidiate.present and the model finder, read on the first wrap */
-    private ?array $presenting = null;
 
     /**
      * Builds the Presenter by name (or position), checking every value
@@ -138,15 +133,7 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
      */
     public function toArray(): array
     {
-        $data = [];
-
-        foreach (Schema::of($this)->members as $key => $member) {
-            $data[$key] = $member->lazy
-                ? new Deferred(fn () => $this->resolve($member))
-                : $this->resolve($member);
-        }
-
-        $data = [...$data, ...$this->extra];
+        $data = [...Engine::values(Schema::of($this), $this, $this->memo()), ...$this->extra];
 
         if (is_string($variable = Settings::get('variable', 'presenter')) && $variable !== '') {
             $data[$variable] = $this;
@@ -188,10 +175,10 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
             return $this->extra[$key];
         }
 
-        $member = Schema::of($this)->member($key)
-            ?? throw UnknownMember::for(static::class, $key, [...Schema::of($this)->keys(), ...array_keys($this->extra)]);
+        $members = Schema::of($this);
+        $member = $members->member($key) ?? throw UnknownMember::for(static::class, $key, [...$members->keys(), ...array_keys($this->extra)]);
 
-        return $this->resolve($member);
+        return Engine::value($member, $this, $this->memo());
     }
 
     public function has(string $key): bool
@@ -240,26 +227,18 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
 
     /**
      * The members as JSON: closures and #[ViewOnly] members are left out.
+     * Models serialize through their model presenter ($visible only), and
+     * raw models are refused, unless config intermidiate.legacy_serialization
+     * is on.
      *
      * @return array<string, mixed>
      */
     public function jsonSerialize(): array
     {
-        $data = [];
+        $extra = array_filter($this->extra, fn (mixed $value) => ! $value instanceof Closure);
 
-        foreach (Schema::of($this)->members as $key => $member) {
-            if ($member->kind !== Member::CALLABLE && ! $member->viewOnly) {
-                $data[$key] = $this->resolve($member);
-            }
-        }
-
-        foreach ($this->extra as $key => $value) {
-            if (! $value instanceof Closure) {
-                $data[$key] = $value;
-            }
-        }
-
-        return $data;
+        /** @var array<string, mixed> */
+        return Engine::serialize([...Engine::values(Schema::of($this), $this, $this->memo(), json: true), ...$extra], ! Settings::legacySerialization(), static::class);
     }
 
     public function __get(string $name): mixed
@@ -304,6 +283,19 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
     protected function prepare(): void {}
 
     /**
+     * Context a #[Cached] member's value depends on beyond the inputs, the
+     * locale and the signed-in user, such as the current tenant:
+     *
+     *     protected function cacheScope(): array { return ['tenant' => tenant()->id]; }
+     *
+     * @return array<string, mixed>
+     */
+    protected function cacheScope(): array
+    {
+        return [];
+    }
+
+    /**
      * Remembers a value for the life of this Presenter, for protected
      * helpers that several members call.
      *
@@ -314,19 +306,17 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
      */
     protected function once(string $key, Closure $callback): mixed
     {
-        $key = "\0".$key;
-
-        if (! array_key_exists($key, $this->resolved)) {
-            $this->resolved[$key] = $callback();
+        if (! array_key_exists($key, $this->once)) {
+            $this->once[$key] = $callback();
         }
 
-        return $this->resolved[$key];
+        return $this->once[$key];
     }
 
     /**
      * Starts a partition of these items (a paginator keeps its numbering).
      *
-     * @param  iterable<mixed>|Paginator|CursorPaginator  $items
+     * @param  iterable<mixed>  $items
      */
     protected function partition(iterable $items): Partition
     {
@@ -334,13 +324,13 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
     }
 
     /**
-     * Wraps a model, or each item, in its model presenter: the one given, or
-     * the one found for it (Post → Presenters\Models\PostPresenter).
+     * Wraps a model, or each item, in its model presenter: the class given,
+     * or the one found for it (Post → Presenters\Models\PostPresenter).
      * Members are presented without this; it's for values you build inside.
      *
-     * @param  object|iterable<mixed>  $items
+     * @param  object|iterable<mixed>  $items  a model, a list, a collection or a paginator
      * @param  class-string<ModelPresenter>|null  $presenter
-     * @return ($items is iterable ? Collection<int, ModelPresenter> : ModelPresenter)
+     * @return Collection<int, ModelPresenter>|ModelPresenter
      */
     protected function present(object|iterable $items, ?string $presenter = null): Collection|ModelPresenter
     {
@@ -384,45 +374,6 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
         return $container->bound(Intermidiate::class) ? $container->make(Intermidiate::class)->models() : null;
     }
 
-    /** A #[Cached] member's value, from the cache when it's there. */
-    private function cached(Member $member, Cached $cached): mixed
-    {
-        $container = Container::getInstance();
-
-        if (! $container->bound('cache')) {
-            return $this->{$member->name}();
-        }
-
-        $cache = $container->make('cache')->store($cached->store);
-
-        if ($cached->tags !== [] && method_exists($cache->getStore(), 'tags')) {
-            $cache = $cache->tags($cached->tags);
-        }
-
-        $key = sprintf('intermidiate:%s:%s:%s:%s', static::class, $member->name, Settings::locale(), Fingerprint::of($this));
-        $ttl = $cached->ttl();
-        $compute = fn () => $this->{$member->name}();
-
-        return $ttl === null ? $cache->rememberForever($key, $compute) : $cache->remember($key, $ttl, $compute);
-    }
-
-    /** Wraps a member's models in their presenter, unless it's #[Raw] or presenting is off. */
-    private function presentMember(Member $member, mixed $value): mixed
-    {
-        // Nothing in these could be a model.
-        if ($member->present === false || $value === null || is_scalar($value) || is_array($value) || $value instanceof Closure) {
-            return $value;
-        }
-
-        [$enabled, $models] = $this->presenting ??= [(bool) Settings::get('present', true), self::models()];
-
-        if ($models === null || ($member->present === null && ! $enabled)) {
-            return $value;
-        }
-
-        return $models->wrap($value, is_string($member->present) ? $member->present : null);
-    }
-
     private function missingViewHint(): string
     {
         $container = Container::getInstance();
@@ -439,35 +390,14 @@ abstract class Presenter implements Arrayable, ArrayAccess, IteratorAggregate, J
         return 'Call ->view(\'name\') or add #[ForView(\'name\')].';
     }
 
-    private function resolve(Member $member): mixed
+    /** This Presenter's memo, after prepare() has run. */
+    private function memo(): Memo
     {
-        if (! $this->prepared) {
-            $this->prepared = true;
+        if ($this->memo === null) {
+            $this->memo = new Memo;
             $this->prepare();
         }
 
-        if ($member->kind === Member::PROPERTY) {
-            $value = $this->{$member->name};
-
-            // Re-wrapped only when the property changed, so computed fields stay memoized.
-            if (! isset($this->presented[$member->name]) || $this->presented[$member->name][0] !== $value) {
-                $this->presented[$member->name] = [$value, $this->presentMember($member, $value)];
-            }
-
-            return $this->presented[$member->name][1];
-        }
-
-        // Built fresh each time: kept on $this it would be a cycle that only the GC frees.
-        if ($member->kind === Member::CALLABLE) {
-            return $this->{$member->name}(...);
-        }
-
-        if (! array_key_exists($member->name, $this->resolved)) {
-            $this->resolved[$member->name] = $this->presentMember($member, $member->cached === null
-                ? $this->{$member->name}()
-                : $this->cached($member, $member->cached));
-        }
-
-        return $this->resolved[$member->name];
+        return $this->memo;
     }
 }
