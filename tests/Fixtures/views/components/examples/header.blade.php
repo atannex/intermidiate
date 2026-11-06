@@ -1,0 +1,1 @@
+@props(['article'])<header><h1>{{ $article->title }}</h1><p>{{ $article->byline }}, {{ $article->published }}</p></header>

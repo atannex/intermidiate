@@ -169,12 +169,17 @@ return [
     |
     | Named formats for Format::date($date, 'long'), on top of the built-in
     | short (j M), medium (j M Y), long (j F Y), full (l j F Y), month (M Y),
-    | time (H:i) and datetime (j M Y, H:i). Dates are shown in app.timezone,
-    | translated to the app locale.
+    | time (H:i) and datetime (j M Y, H:i), translated to the app locale.
+    |
+    | Dates are shown in 'timezone', or app.timezone when it is null. An app
+    | can set it per request (the visitor's own zone) without touching
+    | app.timezone, which stays the zone dates are stored in.
     |
     */
 
     'dates' => [],
+
+    'timezone' => null,
 
     /*
     |--------------------------------------------------------------------------

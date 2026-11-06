@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
  * The formatting Presenters keep repeating, in one place:
  *
  *     Format::excerpt($post->body, 160);   // tags stripped, entities decoded, cut at a word
- *     Format::date($post->published_at);   // "7 Mar 2026", in the app's timezone and locale
+ *     Format::date($post->published_at);   // "7 Mar 2026", in the display timezone and locale
  *     Format::date($date, 'long');         // named formats from config intermidiate.dates
  *     Format::relative($date);             // "3 hours ago", or the date once it's older than a week
  *     Format::date($date, 'time', 'Africa/Douala');   // in another timezone
@@ -91,7 +91,8 @@ final class Format
     }
 
     /**
-     * A date in the app's timezone and locale. $format is a name from config
+     * A date in the display timezone (intermidiate.timezone, else
+     * app.timezone) and the app locale. $format is a name from config
      * intermidiate.dates (short, medium, long, full, month, time, datetime)
      * or a format string. $timezone shows it somewhere else (a newsroom
      * clock, an edition's zone); $translate false keeps month and day names
@@ -191,11 +192,6 @@ final class Format
             default => CarbonImmutable::parse($date),
         };
 
-        if ($timezone === null) {
-            $container = Container::getInstance();
-            $timezone = $container->bound('config') ? $container->make('config')->get('app.timezone') : null;
-        }
-
-        return $carbon->setTimezone($timezone ?: 'UTC')->locale(Settings::locale());
+        return $carbon->setTimezone($timezone ?: Settings::timezone())->locale(Settings::locale());
     }
 }

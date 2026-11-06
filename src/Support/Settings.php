@@ -42,6 +42,18 @@ final class Settings
         return max(1, (int) self::get('pad', 2));
     }
 
+    /**
+     * The zone dates are shown in: intermidiate.timezone when an app sets one
+     * (say, per visitor), else app.timezone. Storage stays on app.timezone.
+     */
+    public static function timezone(): string
+    {
+        $container = Container::getInstance();
+        $config = $container->bound('config') ? $container->make('config') : null;
+
+        return (string) ($config?->get('intermidiate.timezone') ?: $config?->get('app.timezone') ?: 'UTC');
+    }
+
     public static function locale(): string
     {
         $container = Container::getInstance();

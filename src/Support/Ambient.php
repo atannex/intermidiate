@@ -97,12 +97,10 @@ final class Ambient
             return [false, null];
         }
 
-        $container = Container::getInstance();
-
         return match ($parameter->known) {
             'user' => [true, self::user($parameter, null)],
             'locale' => [true, Settings::locale()],
-            default => [true, $container->bound('config') ? (string) $container->make('config')->get('app.timezone', 'UTC') : 'UTC'],
+            default => [true, Settings::timezone()],
         };
     }
 

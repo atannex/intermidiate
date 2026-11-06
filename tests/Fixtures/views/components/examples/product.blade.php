@@ -1,0 +1,1 @@
+@props(['product'])<div>{{ $product->name }}: {{ $product->priceLabel }} ({{ $product->availability }})</div>

@@ -1,0 +1,1 @@
+@props(['article'])<article><a href="{{ $article->permalink }}">{{ $article->title }}</a> <small>{{ $article->byline }} · {{ $article->readingTime }}</small></article>
