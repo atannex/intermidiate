@@ -15,7 +15,7 @@ use Traversable;
 /**
  * A row of seven days.
  *
- * @implements Arrayable<int, mixed>
+ * @implements Arrayable<string, mixed>
  * @implements IteratorAggregate<int, Day>
  */
 final class Week implements Arrayable, Countable, IteratorAggregate, JsonSerializable
